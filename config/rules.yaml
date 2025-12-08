@@ -117,6 +117,10 @@ proxy_groups:
       type: select
       description: "针对 ChatGPT、Claude 等 AI 平台优化"
 
+    - name: "🤖Gemini"
+      type: select
+      description: "gemini优化"
+
     - name: "✈️Telegram"
       type: select
       description: "Telegram 专用代理设置"
@@ -306,6 +310,9 @@ custom_rules:
   - DOMAIN-SUFFIX,livetiming-proxy.multiviewer.dev,🎬海外视频
   - DOMAIN-SUFFIX,api.multiviewer.dev,🎬海外视频
   - PROCESS-NAME,MultiViewer.exe,🎬海外视频
+
+  # Gemini
+  - DOMAIN-SUFFIX,gemini.google.com, 🤖Gemini
 
   # cursor
   - DOMAIN-SUFFIX,cursor.sh, 🤖AI平台

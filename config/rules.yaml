@@ -113,14 +113,6 @@ proxy_groups:
       type: select
       description: "Steam、Epic、PlayStation 等游戏平台"
 
-    - name: "🤖AI平台"
-      type: select
-      description: "针对 ChatGPT、Claude 等 AI 平台优化"
-
-    - name: "🤖Gemini"
-      type: select
-      description: "gemini优化"
-
     - name: "✈️Telegram"
       type: select
       description: "Telegram 专用代理设置"
@@ -128,6 +120,14 @@ proxy_groups:
     - name: "🔍Google"
       type: select
       description: "Google 服务专用"
+
+    - name: "🤖AI平台"
+      type: select
+      description: "针对 ChatGPT、Claude 等 AI 平台优化"
+
+    - name: "🤖Gemini"
+      type: select
+      description: "gemini优化"
 
     - name: "☁️OneDrive"
       type: select

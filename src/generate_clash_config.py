@@ -122,7 +122,14 @@ class ClashConfigGenerator:
 
         return proxy_providers
 
-    def _create_proxy_group_config(self, name: str, group_type: str, use_providers: List[str], filter_regex: str, test_url: str) -> Dict[str, Any]:
+    def _create_proxy_group_config(
+        self,
+        name: str,
+        group_type: str,
+        use_providers: List[str],
+        filter_regex: str,
+        test_url: str,
+    ) -> Dict[str, Any]:
         """创建代理组配置的通用方法"""
         group_config = {
             "name": name,
@@ -134,13 +141,13 @@ class ClashConfigGenerator:
         # 根据类型添加特定参数
         if group_type == "fallback":
             group_config["timeout"] = 5000
-            group_config["interval"] = 600
+            group_config["interval"] = 60
         elif group_type == "url-test":
             group_config["tolerance"] = 500
-            group_config["interval"] = 600
+            group_config["interval"] = 60
         elif group_type == "load-balance":
             group_config["strategy"] = "consistent-hashing"
-            group_config["interval"] = 600
+            group_config["interval"] = 60
 
         # 如果有提供者列表，则添加use字段
         if use_providers:
@@ -175,7 +182,10 @@ class ClashConfigGenerator:
                 # 检查是否应该为此提供者生成此地区的组
                 # 如果region_providers有配置，只生成配置中包含此提供者的地区
                 # 如果region_providers没有配置此地区，则生成所有地区
-                if region_name in region_providers_map and provider_name not in region_providers_map[region_name]:
+                if (
+                    region_name in region_providers_map
+                    and provider_name not in region_providers_map[region_name]
+                ):
                     logger.debug(
                         f"跳过 {provider_name} 的 {region_name} 组（未在region_providers中配置）"
                     )
@@ -210,7 +220,7 @@ class ClashConfigGenerator:
                         group_type=group_type,  # 使用配置的类型而不是固定的url-test
                         use_providers=[provider_name],
                         filter_regex=filter_regex,
-                        test_url=test_url
+                        test_url=test_url,
                     )
 
                     # 注意：Clash 会自动处理空的代理组
@@ -265,11 +275,14 @@ class ClashConfigGenerator:
             if region_name in region_providers_config:
                 # 使用指定的提供者
                 selected_providers = [
-                    provider for provider in region_providers_config[region_name] 
+                    provider
+                    for provider in region_providers_config[region_name]
                     if provider in providers
                 ]
                 if not selected_providers:
-                    logger.warning(f"地区 {region_name} 指定的提供者不存在，跳过该地区组")
+                    logger.warning(
+                        f"地区 {region_name} 指定的提供者不存在，跳过该地区组"
+                    )
                     continue
             else:
                 # 默认使用所有提供者
@@ -290,16 +303,20 @@ class ClashConfigGenerator:
                 group_type=group_type,
                 use_providers=selected_providers,  # 使用选中的提供者
                 filter_regex=filter_regex,
-                test_url=test_url
+                test_url=test_url,
             )
 
             merged_groups.append(group_config)
-            logger.info(f"创建合并地区组: {group_name} (类型: {group_type}, 提供者: {selected_providers})")
+            logger.info(
+                f"创建合并地区组: {group_name} (类型: {group_type}, 提供者: {selected_providers})"
+            )
 
         logger.info(f"生成了 {len(merged_groups)} 个合并地区组")
         return merged_groups
 
-    def _create_custom_proxy_group_config(self, name: str, group_type: str, filter_regex: str, test_url: str) -> Dict[str, Any]:
+    def _create_custom_proxy_group_config(
+        self, name: str, group_type: str, filter_regex: str, test_url: str
+    ) -> Dict[str, Any]:
         """创建自定义代理组配置的通用方法"""
         group_config = {
             "name": name,
@@ -404,7 +421,7 @@ class ClashConfigGenerator:
                     name=full_group_name,
                     group_type=group_type,
                     filter_regex=filter_regex,
-                    test_url=test_url
+                    test_url=test_url,
                 )
 
                 # 添加 use 参数：如果指定了提供者则使用指定的，否则使用所有提供者
@@ -481,7 +498,12 @@ class ClashConfigGenerator:
                         region_providers_config[region_name].append(provider_name)
         return region_providers_config
 
-    def _get_region_group_names(self, providers: Dict[str, str], regions: Dict[str, Dict[str, Any]], use_merged_groups: bool) -> List[str]:
+    def _get_region_group_names(
+        self,
+        providers: Dict[str, str],
+        regions: Dict[str, Dict[str, Any]],
+        use_merged_groups: bool,
+    ) -> List[str]:
         """获取所有地区组名称"""
         region_group_names = []
         if use_merged_groups:
@@ -491,11 +513,14 @@ class ClashConfigGenerator:
         else:
             # 使用region_providers配置来决定包含哪些地区组
             region_providers_map = self._get_region_providers_config(providers)
-            
+
             for provider_name in providers.keys():
                 for region_name, region_config in regions.items():
                     # 检查该提供者是否在region_providers配置中被指定用于此地区
-                    if region_name in region_providers_map and provider_name in region_providers_map[region_name]:
+                    if (
+                        region_name in region_providers_map
+                        and provider_name in region_providers_map[region_name]
+                    ):
                         emoji = region_config["emoji"]
                         region_group_names.append(
                             f"{emoji}{region_name}_{provider_name}"
@@ -513,7 +538,7 @@ class ClashConfigGenerator:
     ) -> List[Dict[str, Any]]:
         """生成中继代理组，包含所有合并的地区组节点"""
         relay_groups = []
-        
+
         # 检查是否有中继组配置
         if not self.config.has_section("relay_groups"):
             return relay_groups
@@ -527,7 +552,7 @@ class ClashConfigGenerator:
         # 获取中继组配置
         relay_name = self.config.get("relay_groups", "name", fallback="统一代理")
         relay_type = self.config.get("relay_groups", "type", fallback="fallback")
-        
+
         # 获取要包含的地区列表，如果未指定则包含所有地区
         included_regions_str = self.config.get("relay_groups", "regions", fallback="")
         if included_regions_str:
@@ -539,9 +564,9 @@ class ClashConfigGenerator:
         use_merged_groups = self.config.getboolean(
             "clash", "use_merged_region_groups", fallback=False
         )
-        
+
         proxies = []
-        
+
         if use_merged_groups:
             # 如果使用合并地区组，则中继组包含所有合并的地区组
             for region_name in regions.keys():
@@ -551,16 +576,22 @@ class ClashConfigGenerator:
         else:
             # 如果不使用合并地区组，则包含所有按提供者分组的地区组
             region_providers_map = self._get_region_providers_config(providers)
-            
+
             for provider_name in providers.keys():
                 for region_name, region_config in regions.items():
                     # 检查该提供者是否在region_providers配置中被指定用于此地区
-                    if region_name in region_providers_map and provider_name in region_providers_map[region_name]:
+                    if (
+                        region_name in region_providers_map
+                        and provider_name in region_providers_map[region_name]
+                    ):
                         if region_name in included_regions:
                             emoji = region_config["emoji"]
                             proxies.append(f"{emoji}{region_name}_{provider_name}")
                     # 如果没有region_providers配置，或者该地区没有配置，则包含所有地区
-                    elif region_name not in region_providers_map and region_name in included_regions:
+                    elif (
+                        region_name not in region_providers_map
+                        and region_name in included_regions
+                    ):
                         emoji = region_config["emoji"]
                         proxies.append(f"{emoji}{region_name}_{provider_name}")
 
@@ -593,7 +624,9 @@ class ClashConfigGenerator:
                 relay_group_config["proxies"] = proxies
                 logger.info(f"为中继组 {relay_name} 设置默认节点: {default_node}")
             else:
-                logger.warning(f"为中继组 {relay_name} 配置的默认节点 {default_node} 不存在于可用节点列表中")
+                logger.warning(
+                    f"为中继组 {relay_name} 配置的默认节点 {default_node} 不存在于可用节点列表中"
+                )
 
         # 根据类型添加特定参数
         if relay_type == "fallback":
@@ -607,22 +640,26 @@ class ClashConfigGenerator:
             relay_group_config["interval"] = 600
 
         relay_groups.append(relay_group_config)
-        logger.info(f"创建中继组: {relay_name} (类型: {relay_type}, 包含 {len(proxies)} 个节点)")
+        logger.info(
+            f"创建中继组: {relay_name} (类型: {relay_type}, 包含 {len(proxies)} 个节点)"
+        )
 
         return relay_groups
 
     def _should_include_relay_group(self, group_name: str) -> bool:
         """判断是否应该将中继组添加到当前主代理组"""
         include_relay = True  # 默认添加到所有主代理组
-        
+
         if self.config.has_section("relay_groups_targets"):
             # 如果配置了目标组列表，则只在指定的组中添加中继组
-            target_groups_str = self.config.get("relay_groups_targets", group_name, fallback="")
+            target_groups_str = self.config.get(
+                "relay_groups_targets", group_name, fallback=""
+            )
             if target_groups_str:
                 include_relay = True
             else:
                 include_relay = False
-        
+
         return include_relay
 
     def generate_main_proxy_groups(
@@ -642,7 +679,9 @@ class ClashConfigGenerator:
         )
 
         # 获取所有地区组名称
-        region_group_names = self._get_region_group_names(providers, regions, use_merged_groups)
+        region_group_names = self._get_region_group_names(
+            providers, regions, use_merged_groups
+        )
 
         # 获取代理组默认配置
         proxy_defaults = {}
@@ -655,7 +694,9 @@ class ClashConfigGenerator:
         # 获取主代理组的自定义地区配置
         custom_region_groups = {}
         if self.config.has_section("main_proxy_region_groups"):
-            for group_name, regions_str in self.config["main_proxy_region_groups"].items():
+            for group_name, regions_str in self.config[
+                "main_proxy_region_groups"
+            ].items():
                 region_list = [r.strip() for r in regions_str.split(",")]
                 custom_region_groups[group_name] = region_list
                 logger.info(f"设置 {group_name} 的自定义地区组: {region_list}")
@@ -663,7 +704,9 @@ class ClashConfigGenerator:
         # 获取中继组名称（如果配置了）
         relay_group_name = None
         if self.config.has_section("relay_groups"):
-            relay_group_name = self.config.get("relay_groups", "name", fallback="统一代理")
+            relay_group_name = self.config.get(
+                "relay_groups", "name", fallback="统一代理"
+            )
 
         # 从配置文件获取代理组配置
         proxy_groups_config = self.rules_config.get("proxy_groups", {})
@@ -685,18 +728,23 @@ class ClashConfigGenerator:
             # 根据自定义配置或默认行为添加地区组
             if group_name in custom_region_groups:
                 region_list = custom_region_groups[group_name]
-                
+
                 # 检查是否为手动模式
-                if len(region_list) == 1 and region_list[0].lower() == 'manual':
-                    logger.info(f"主代理组 {group_name} 设置为手动模式，不自动添加任何地区节点")
+                if len(region_list) == 1 and region_list[0].lower() == "manual":
+                    logger.info(
+                        f"主代理组 {group_name} 设置为手动模式，不自动添加任何地区节点"
+                    )
                 else:
                     # 使用自定义地区组
                     for region_name, region_config in regions.items():
                         emoji = region_config["emoji"]
                         full_region_name = f"{emoji}{region_name}"
-                        
+
                         # 检查该地区是否在自定义列表中，且不是默认节点
-                        if region_name in region_list and full_region_name != default_node:
+                        if (
+                            region_name in region_list
+                            and full_region_name != default_node
+                        ):
                             proxies.append(full_region_name)
             else:
                 # 默认行为：添加所有地区组（排除已作为默认节点的）
@@ -720,12 +768,20 @@ class ClashConfigGenerator:
                 proxies.insert(0, relay_group_name)  # 插入到开头以确保是默认节点
 
             # 添加中继组（如果配置了且不是默认节点，并且不在proxies中）
-            if relay_group_name and relay_group_name != default_node and relay_group_name not in proxies:
+            if (
+                relay_group_name
+                and relay_group_name != default_node
+                and relay_group_name not in proxies
+            ):
                 if self._should_include_relay_group(group_name):
                     proxies.append(relay_group_name)
 
             # 添加手动选择组（如果启用，排除已作为默认节点的，并且不在proxies中）
-            if manual_select_group and manual_select_group["name"] != default_node and manual_select_group["name"] not in proxies:
+            if (
+                manual_select_group
+                and manual_select_group["name"] != default_node
+                and manual_select_group["name"] not in proxies
+            ):
                 proxies.append(manual_select_group["name"])
 
             # 最后添加 DIRECT
@@ -810,11 +866,13 @@ class ClashConfigGenerator:
             all_groups.extend(relay_groups)
         all_groups.extend(main_groups)
         all_groups.extend(region_groups)
-        all_groups.extend([
-            # 添加自定义组，移除内部使用的 _target_groups 字段
-            {k: v for k, v in custom_group.items() if not k.startswith("_")}
-            for custom_group in custom_groups
-        ])
+        all_groups.extend(
+            [
+                # 添加自定义组，移除内部使用的 _target_groups 字段
+                {k: v for k, v in custom_group.items() if not k.startswith("_")}
+                for custom_group in custom_groups
+            ]
+        )
         if manual_select_group:
             all_groups.append(manual_select_group)
 

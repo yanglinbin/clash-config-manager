@@ -313,6 +313,8 @@ custom_rules:
 
   # Gemini
   - DOMAIN-SUFFIX,gemini.google.com, 🤖Gemini
+  - PROCESS-NAME,com.google.android.apps.bard, 🤖Gemini
+  - PROCESS-NAME,com.google.android.googlequicksearchbox, 🤖Gemini
 
   # cursor
   - DOMAIN-SUFFIX,cursor.sh, 🤖AI平台

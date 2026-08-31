@@ -80,5 +80,10 @@ docker-volumes/
 *.temp
 *.cache
 
+# ===== 本地验证/工具缓存 =====
+.uv-cache/
+.uv-python/
+.verify_tmp/
+
 # ===== 文档 =====
 docs/

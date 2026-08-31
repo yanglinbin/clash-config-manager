@@ -1,0 +1,33 @@
+# cursor
+- DOMAIN-SUFFIX,cursor.sh,AI平台
+- DOMAIN-SUFFIX,cursor.com,AI平台
+- PROCESS-NAME,cursor,AI平台
+
+# jetbrains ai
+- DOMAIN-SUFFIX,jetbrains.ai,AI平台
+
+# AI 平台规则
+- DOMAIN-SUFFIX,anthropic.com,AI平台
+- DOMAIN-SUFFIX,claude.ai,AI平台
+- DOMAIN-KEYWORD,claude,AI平台
+- DOMAIN-KEYWORD,anthropic,AI平台
+- DOMAIN-KEYWORD,openai,AI平台
+- DOMAIN-SUFFIX,auth0.com,AI平台
+- DOMAIN-SUFFIX,challenges.cloudflare.com,AI平台
+- DOMAIN-SUFFIX,chatgpt.com,AI平台
+- DOMAIN-SUFFIX,client-api.arkoselabs.com,AI平台
+- DOMAIN-SUFFIX,events.statsigapi.net,AI平台
+- DOMAIN-SUFFIX,featuregates.org,AI平台
+- DOMAIN-SUFFIX,identrust.com,AI平台
+- DOMAIN-SUFFIX,intercom.io,AI平台
+- DOMAIN-SUFFIX,intercomcdn.com,AI平台
+- DOMAIN-SUFFIX,oaistatic.com,AI平台
+- DOMAIN-SUFFIX,oaiusercontent.com,AI平台
+- DOMAIN-SUFFIX,openai.com,AI平台
+- DOMAIN-SUFFIX,openaiapi-site.azureedge.net,AI平台
+- DOMAIN-SUFFIX,sentry.io,AI平台
+- DOMAIN-SUFFIX,stripe.com,AI平台
+
+# Copilot 规则
+- DOMAIN-SUFFIX,copilot.microsoft.com,AI平台
+- DOMAIN-SUFFIX,githubcopilot.com,AI平台

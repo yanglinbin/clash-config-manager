@@ -1,23 +1,71 @@
 // Clash Config Manager - 前端脚本
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+}
+
+function showResult(className, html) {
+    const resultDiv = document.getElementById('result');
+    resultDiv.style.display = 'block';
+    resultDiv.className = 'status ' + className;
+    resultDiv.innerHTML = html;
+}
+
+function getToken() {
+    return localStorage.getItem('update_token') || '';
+}
+
+function saveToken() {
+    const input = document.getElementById('token-input');
+    if (input) {
+        localStorage.setItem('update_token', input.value.trim());
+    }
+}
+
 /**
  * 更新配置
  */
 function updateConfig() {
-    const resultDiv = document.getElementById('result');
-    resultDiv.style.display = 'block';
-    resultDiv.className = 'status info';
-    resultDiv.innerHTML = '<p>⏳ 正在更新配置...</p>';
-    
-    fetch('/update-config', { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
-            resultDiv.className = 'status ' + (data.status === 'success' ? 'success' : 'error');
-            resultDiv.innerHTML = '<h3>更新结果</h3><p>' + data.message + '</p><p>时间: ' + data.timestamp + '</p>';
+    const btn = document.getElementById('update-btn');
+    // 防抖：更新过程中禁用按钮，避免并发触发
+    if (btn.disabled) return;
+    btn.disabled = true;
+    showResult('info', '<p> 正在更新配置...</p>');
+
+    const token = getToken();
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    fetch('/update-config', { method: 'POST', headers })
+        .then(response => response.json().then(data => ({ ok: response.ok, status: response.status, data })))
+        .then(({ ok, status, data }) => {
+            if (ok && data.status === 'success') {
+                showResult(
+                    'success',
+                    '<h3> 更新成功</h3><p>时间: ' + escapeHtml(data.timestamp) + '</p>'
+                );
+                checkStatus();
+            } else if (status === 401) {
+                showResult(
+                    'error',
+                    '<h3> 需要更新令牌</h3><p>请在“操作”区域输入更新令牌后重试。</p>'
+                );
+            } else {
+                showResult(
+                    'error',
+                    '<h3> 更新失败</h3><p>' +
+                    escapeHtml(data.message || data.error || '未知错误') +
+                    '</p>'
+                );
+            }
         })
         .catch(error => {
-            resultDiv.className = 'status error';
-            resultDiv.innerHTML = '<h3>❌ 更新失败</h3><p>' + error + '</p>';
+            showResult('error', '<h3> 更新失败</h3><p>' + escapeHtml(error) + '</p>');
+        })
+        .finally(() => {
+            btn.disabled = false;
         });
 }
 
@@ -25,20 +73,26 @@ function updateConfig() {
  * 检查服务状态
  */
 function checkStatus() {
-    const resultDiv = document.getElementById('result');
-    resultDiv.style.display = 'block';
-    resultDiv.className = 'status info';
-    resultDiv.innerHTML = '<p>⏳ 正在检查状态...</p>';
-    
+    showResult('info', '<p> 正在检查状态...</p>');
+
     fetch('/status')
         .then(response => response.json())
         .then(data => {
-            resultDiv.className = 'status info';
-            resultDiv.innerHTML = '<h3>📊 状态信息</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            showResult(
+                'info',
+                '<h3> 状态信息</h3><pre>' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>'
+            );
         })
         .catch(error => {
-            resultDiv.className = 'status error';
-            resultDiv.innerHTML = '<h3>❌ 检查失败</h3><p>' + error + '</p>';
+            showResult('error', '<h3> 检查失败</h3><p>' + escapeHtml(error) + '</p>');
         });
 }
 
+// 令牌输入框内容变化时保存
+document.addEventListener('DOMContentLoaded', function () {
+    const input = document.getElementById('token-input');
+    if (input) {
+        input.value = getToken();
+        input.addEventListener('change', saveToken);
+    }
+});

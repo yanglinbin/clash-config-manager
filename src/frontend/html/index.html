@@ -8,41 +8,61 @@
 </head>
 <body>
     <div class="container">
-        <h1>🚀 Clash Config Manager</h1>
-        
+        <h1> Clash Config Manager</h1>
+
         <div class="status info">
-            <h3>📊 服务状态</h3>
-            <p>✅ 服务正在运行</p>
-            <p>📅 当前时间: {{ current_time }}</p>
-            {% if last_update %}
-            <p>🔄 最后更新: {{ last_update }}</p>
+            <h3> 服务状态</h3>
+            <p> 服务正在运行</p>
+            <p> 当前时间: {{ current_time }}</p>
+            <p> 最后更新: {{ last_update }}</p>
+        </div>
+
+        <div class="status">
+            <h3> 配置信息</h3>
+            <p>配置文件: {{ config_exists }}</p>
+            {% if stats %}
+            <p>提供者: {{ stats.providers }} 个</p>
+            <p>代理组: {{ stats.groups }} 个</p>
+            <p>规则: {{ stats.rules }} 条</p>
+            <p>最近生成: {{ stats.generated_at }}（耗时 {{ stats.duration_ms }} ms）</p>
+            {% else %}
+            <p>尚未生成统计信息</p>
             {% endif %}
         </div>
-        
+
         <div class="status">
-            <h3>📁 配置信息</h3>
-            <p>配置文件: {{ config_exists }}</p>
+            <h3> 自动更新</h3>
+            <p>更新间隔: {{ update_interval_text }}</p>
+            {% if next_update %}
+            <p>下次更新: {{ next_update }}</p>
+            {% endif %}
         </div>
-        
+
         <div class="status api-list">
-            <h3>🔌 API 接口</h3>
+            <h3> API 接口</h3>
             <ul>
                 <li><code>GET /status</code> - 获取服务状态（JSON格式）</li>
-                <li><code>POST /update-config</code> - 触发配置更新</li>
+                <li><code>POST /update-config</code> - 触发配置更新（可配置令牌鉴权）</li>
                 <li><code>GET /clash_profile.yaml</code> - 获取生成的配置文件</li>
+                <li><code>POST /webhook/github</code> - GitHub Webhook（HMAC 校验）</li>
             </ul>
         </div>
-        
+
         <div class="status">
-            <h3>🎮 操作</h3>
-            <button onclick="updateConfig()">🔄 更新配置</button>
-            <button onclick="checkStatus()">📊 检查状态</button>
+            <h3> 操作</h3>
+            {% if need_token %}
+            <div class="token-row">
+                <label for="token-input">更新令牌:</label>
+                <input type="password" id="token-input" placeholder="输入更新令牌（仅保存在本地浏览器）">
+            </div>
+            {% endif %}
+            <button id="update-btn" onclick="updateConfig()"> 更新配置</button>
+            <button onclick="checkStatus()"> 检查状态</button>
         </div>
-        
+
         <div id="result"></div>
     </div>
-    
+
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
-

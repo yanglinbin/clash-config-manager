@@ -1,35 +1,55 @@
+# ============================================================
+# Clash Config Manager 主配置示例
+# 复制为 config.ini 后按需修改。
+# 当前为单一供应商模式：所有代理组只围绕一个供应商生成。
+# 生成时直接拉取 active_provider 的原始订阅并内嵌节点，
+# 不使用 proxy-providers，不依赖客户端运行时拉取订阅。
+# ============================================================
+
 [proxy_providers]
-# 代理提供者配置
+# 订阅源配置：可维护任意多个，但只有 [provider_control] active_provider
+# 指定的那一个参与生成（生成器直接拉取该订阅并转换为内嵌节点）
 # 格式: 配置名称 = 订阅URL
-# 示例:
-# PROVIDER1 = http://your-subscription-url-1
-# PROVIDER2 = https://your-subscription-url-2
-# PROVIDER3 = https://your-subscription-url-3
+# 名称统一转为大写，供其他配置节引用
+XXAI = https://your-subscription-url-1
+NAIYUN = https://your-subscription-url-2
+
+[provider_control]
+# 单一供应商模式：必填，指定唯一参与生成的订阅源
+# 未配置或指定的名称不存在时，生成失败并保留旧配置
+# 环境变量 ACTIVE_PROVIDER 可覆盖此值
+active_provider = XXAI
 
 [regions]
-# 地区关键词配置，用于自动分组
-# 格式: 地区名称 = emoji,匹配关键词1,匹配关键词2
-香港 = 🇭🇰,Hong Kong,HK,港,HongKong
-台湾 = 🇹🇼,Taiwan,TW,台,Taipei
-日本 = 🇯🇵,Japan,JP,日,Tokyo
-美国 = 🇺🇸,United States,US,美,America,USA
-新加坡 = 🇸🇬,Singapore,SG,新,狮城
+# 地区关键词配置：每个地区生成一个地区组，组名即地区名称
+# 格式: 地区名称 = 匹配关键词1,匹配关键词2
+# 节点名包含任一关键词即归入该地区组
+香港 = Hong Kong,HK,香港,HongKong
+台湾 = Taiwan,TW,台湾,Taipei
+日本 = Japan,JP,日本,Tokyo
+美国 = United States,US,美国,America,USA
+新加坡 = Singapore,SG,新加坡,狮城
 
 [filter]
-# 节点过滤规则
-# 包含以下关键字的节点将被排除，不会出现在自动选择组中
+# 节点过滤：节点名包含任一关键词则不会出现在生成的任何组中（全局排除）
 exclude_keywords = 网址,剩余,流量,重置,套餐,如遇,永久,官方,群组,欢迎,官网,频道,个人,到期,续费
 
 [server]
-# 更新间隔（秒）
+# 自动更新间隔（秒）：Web 应用启动后按此间隔重新生成配置
+# 同时作为 proxy-providers 的订阅刷新间隔；设为 0 或负值则关闭自动更新
+# （此时订阅刷新间隔回退为 3600）
+# 环境变量 UPDATE_INTERVAL 可覆盖此值
 update_interval = 3600
 
+# 备份保留数量：覆盖输出配置前自动备份到 backups/，超出部分清理
+backup_keep = 10
+
 [files]
-# 配置文件路径
+# 规则配置文件路径
 rules_config = config/rules.yaml
 
 [clash]
-# Clash 基础配置
+# 生成 Clash 配置的基础参数
 port = 7890
 socks_port = 7891
 allow_lan = true
@@ -38,95 +58,84 @@ log_level = info
 external_controller = :9090
 test_url = http://connectivitycheck.gstatic.com/generate_204
 
-# 是否为所有提供者生成所有地区组（false=只生成指定的组合）
-generate_all_region_groups = false
+# 地区组默认类型（可选；会被 [merged_regions] 的 default_type 覆盖）
+# 可选: select / url-test / fallback / load-balance
+# default_group_type = fallback
 
-# 使用合并的地区组（将所有提供者的同地区节点合并到一个组）
-# true=合并地区组（推荐），false=按提供者分组
-use_merged_region_groups = true
-
-[provider_regions]
-# 指定每个提供者支持的地区（如果 generate_all_region_groups=false）
-# 格式: 提供者名称 = 地区1,地区2,地区3
-# 如果不指定，则生成所有地区组
-XXAI = 香港,台湾,日本,美国,新加坡
-NAIYUN = 香港,台湾,日本,美国
-KITTY = 香港,日本,美国,新加坡
+# 单个地区的组类型覆盖（可选），格式: group_type_地区名称 = 类型
+# group_type_香港 = select
 
 [merged_regions]
-# 合并地区组配置（仅当 use_merged_region_groups=true 时生效）
+# 地区组类型配置（作用于每个地区组）
 # 格式: 地区名称 = 代理组类型
 # 类型说明:
-#   select          - 手动选择（完全用户控制，最稳定）
-#   url-test        - 自动选择低延迟节点（可能频繁切换）
-#   fallback        - 故障转移（推荐：只在节点失败时切换，连接稳定）
-#   load-balance    - 负载均衡（适合下载，但会破坏会话）
-
-# 默认类型（如果某个地区未单独配置）
+#   select       - 手动选择（完全用户控制，最稳定）
+#   url-test     - 自动选择低延迟节点（可能频繁切换）
+#   fallback     - 故障转移（推荐：只在节点失败时切换，连接稳定）
+#   load-balance - 负载均衡（适合下载，但会破坏会话）
+# 优先级: 地区键 > default_type > [clash] group_type_地区 > [clash] default_group_type
 default_type = fallback
 
-# 各地区配置（可以为不同地区配置不同类型）
 香港 = fallback
 台湾 = fallback
 日本 = fallback
 美国 = fallback
 新加坡 = fallback
 
-[manual_select]
-# 手动选择组配置（会添加到所有主代理组，特殊组除外）
-# 格式: 组名 = emoji
-# 这个组会包含所有节点，用户可以手动选择任意节点
-enabled = true
-name = 手动选择
-emoji = ✋
-
 [custom_groups]
-# 自定义节点组配置
-# 可以为特定用途创建专用节点组，自由指定使用的提供者和地区
-# 格式: 组名 = emoji, 类型, 提供者列表, 地区列表, 目标代理组列表
-# 
-# 参数说明:
-#   组名           - 节点组的名称（会在前面加上 emoji）
-#   emoji          - 显示在组名前的图标
+# 自定义节点组：为特定用途从活动提供者的节点中筛选组合
+# 格式: 组名 = 类型, 提供者列表, 地区列表, 目标代理组列表
+#   组名           - 节点组的名称
 #   类型           - select/fallback/url-test/load-balance
-#   提供者列表     - 用 | 分隔，如 XXAI|NAIYUN（留空表示从所有节点中筛选）
-#   地区列表       - 用 | 分隔，如 香港|日本|美国（会匹配这些地区的所有节点）
-#   目标代理组列表 - 用 | 分隔，指定添加到哪些主代理组（留空表示添加到所有主代理组，特殊组除外）
+#   提供者列表     - 已不参与筛选（直接内嵌模式只用活动供应商的节点），留空即可
+#   地区列表       - 用 | 分隔，如 香港|日本；匹配这些地区关键词的节点
+#   目标代理组列表 - 用 | 分隔；留空 = 添加到所有主代理组（特殊组除外）
 #
-# 使用场景:
-#   - AI 平台专用节点（需要稳定 IP，建议 fallback）
-#   - 特定地区组合（如亚洲节点 = 香港|日本|新加坡）
-#   - 高质量节点精选（只使用特定提供者的特定地区）
+# 示例: AI 专用节点（稳定性优先，只添加到 AI 相关主组）
+AI专用 = fallback, XXAI, 香港|日本|美国, AI平台|Copilot
 
-# 示例 1: AI 专用节点（稳定性优先，只添加到 AI 相关代理组）
-AI专用 = 🤖, fallback, XXAI|NAIYUN, 香港|日本|美国, 🤖AI平台|🤖Copilot
+# 示例: 下载专用节点（全部提供者，添加到海外代理和视频组）
+# 下载专用 = load-balance, , 香港|美国, 海外代理|YouTube|海外视频
 
-# 示例 2: 游戏专用节点（低延迟优先，添加到游戏平台代理组）
-# 游戏专用 = 🎮, url-test, XXAI, 香港|日本, 🎮游戏平台
+[main_proxy_region_groups]
+# 主代理组的地图组控制（可选）
+# 格式: 主组名称 = 地区1,地区2
+# 值 manual = 该主组不自动添加任何地区组，完全手动管理
+# 不配置 = 该主组自动包含全部地区组
+# AI平台 = manual
+# 全球直连 = manual
 
-# 示例 3: 香港负载均衡组（速度优先，添加到所有主代理组）
-# 香港负载均衡 = 🇭🇰, load-balance, , 香港, 
+[relay_groups]
+# 中继代理组（可选）：把各地区组作为节点再包一层
+# name    - 中继组名称（会出现在各主组选项中）
+# type    - fallback / url-test / load-balance
+# regions - 包含的地区列表（逗号分隔；留空 = 全部地区）
+# name = 统一代理
+# type = fallback
+# regions = 香港,台湾,日本
 
-# 示例 4: 下载专用节点（添加到海外代理和视频相关组）
-# 下载专用 = ⬇️, load-balance, , 香港|美国, 🚀海外代理|🎬YouTube|🎬海外视频
+[relay_groups_targets]
+# 中继组投放控制（可选）：只把中继组加入列出的主组
+# 格式: 主组名称 = 任意非空值
+# 不配置本节点 = 中继组加入所有主组
+# 海外代理 = 1
 
 [proxy_group_defaults]
-# 为各主代理组配置默认节点
-# 格式: 代理组名称 = 默认节点名称
-# 留空或不配置则使用第一个可用节点
-# 
-# 可用的默认节点包括:
-#   - 地区组: 🇭🇰香港、🇹🇼台湾、🇯🇵日本、🇺🇸美国、🇸🇬新加坡
-#   - 自定义组: 您在 [custom_groups] 中定义的组
-#   - 手动选择: ✋手动选择（如果启用）
-#   - 特殊选项: DIRECT（直连）
+# 为各主代理组指定默认节点（列表第一位即 Clash 的默认选择）
+# 格式: 主组名称 = 默认节点名称
+# 可用值: 地区组名 / 自定义组名 / DIRECT / 中继组名
+# 不配置 = 使用列表第一个可用节点
+海外代理 = 香港
+Telegram = 香港
+AI平台 = AI专用
+YouTube = 香港
+Netflix = 香港
+Google = 香港
 
-# 示例配置:
-🚀海外代理 = 🇭🇰香港
-✈️Telegram = 🇭🇰香港
-🤖AI平台 = 🤖AI专用
-🎬YouTube = 🇭🇰香港
-🎬海外视频 = 🇭🇰香港
-🎬Netflix = 🇭🇰香港
-🔍Google = 🇭🇰香港
-🤖Copilot = 🤖AI专用
+# ============ 环境变量（docker-compose.yml 或启动环境） ============
+# ACTIVE_PROVIDER - 覆盖 [provider_control] active_provider
+# UPDATE_INTERVAL - 覆盖 [server] update_interval
+# APP_PORT        - Web 服务监听端口（默认 5000）
+# LOG_LEVEL       - 日志级别: DEBUG/INFO/WARNING/ERROR（默认 INFO）
+# UPDATE_TOKEN    - /update-config 接口的 Bearer 令牌（可选）
+# WEBHOOK_SECRET  - GitHub Webhook HMAC 密钥；同时作为 /update-config 令牌

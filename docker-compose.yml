@@ -37,12 +37,16 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # 更新间隔（秒）
       - UPDATE_INTERVAL=${UPDATE_INTERVAL:-3600}
-      # Webhook密钥（从配置文件读取，这里仅作为备用）
+      # 单一供应商模式：只使用指定的提供者（留空=全部使用）
+      - ACTIVE_PROVIDER=${ACTIVE_PROVIDER:-}
+      # 更新令牌：/update-config 接口的 Bearer 令牌（可选）
+      - UPDATE_TOKEN=${UPDATE_TOKEN:-}
+      # Webhook密钥：GitHub Webhook HMAC 校验；同时作为 /update-config 的令牌
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
     
     # 健康检查
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/status"]
+      test: ["CMD-SHELL", "curl -f \"http://localhost:${APP_PORT:-5000}/status\""]
       interval: 30s
       timeout: 10s
       retries: 3

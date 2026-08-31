@@ -1,27 +1,33 @@
 # Clash 配置管理器
 
-自动化的 Clash 代理配置管理系统，支持多订阅源合并、自动更新、节点筛选和规则管理。
+自动化的 Clash 代理配置管理系统，支持多订阅源、自动更新、节点筛选和规则管理。
 
-## ✨ 功能特性
+##  功能特性
 
-- 🔄 **多订阅源合并** - 支持同时管理多个代理订阅源
-- 🌍 **智能节点分组** - 按地区自动分组（香港、台湾、日本、美国、新加坡等）
-- 🎯 **节点关键词过滤** - 自动过滤广告节点和无效节点
-- ⚙️ **自定义规则配置** - 灵活配置代理规则和分流规则
-- 🐳 **Docker 部署** - 容器化部署，简单可靠
-- 🌐 **Web 管理界面** - 提供状态查询和配置更新功能
+-  **多订阅源管理** - 配置中可维护多个订阅源，当前只使用指定的一个
+-  **单一供应商模式** - 配置中可维护多个订阅源，但只使用指定的一个（`active_provider`）
+-  **直接内嵌节点** - 生成时直接拉取原始订阅并转换为节点列表写入配置，不依赖 proxy-providers
+-  **自动更新** - 按配置的间隔定时重新生成配置（`[server] update_interval`）
+-  **智能节点分组** - 按地区自动分组（香港、台湾、日本、美国、新加坡等）
+-  **节点关键词过滤** - 自动过滤广告节点和无效节点
+-  **自定义规则配置** - 灵活配置代理规则和分流规则
+-  **生成前校验** - 校验组名唯一、节点/组引用完整、规则格式正确，失败时不覆盖旧配置
+-  **自动备份** - 每次更新前备份旧配置到 `backups/`，保留最近 N 份
+-  **GitHub Webhook** - 内置 HMAC 校验的 Webhook 端点，推送即更新
+-  **Docker 部署** - 容器化部署，简单可靠
+-  **Web 管理界面** - 提供状态查询和配置更新功能
 
 ---
 
-## 🚀 快速开始
+##  快速开始
 
 ### 前置要求
 
-- Docker 和 Docker Compose 已安装
+- Docker 和 Docker Compose 已安装（应用运行于 Python 3.12）
 - 已创建 `docker-shared-net` 网络
 - Nginx 容器已部署并配置
 
-> 📘 **首次部署**？请查看完整部署指南：[DEPLOY_GUIDE.md](./DEPLOY_GUIDE.md)
+>  **首次部署**？请查看完整部署指南：[DEPLOY_GUIDE.md](./DEPLOY_GUIDE.md)
 
 ### 1. 创建网络（首次部署）
 
@@ -64,7 +70,7 @@ docker compose ps
 
 ---
 
-## 📁 项目结构
+##  项目结构
 
 ```
 clash-config-manager/
@@ -91,7 +97,7 @@ clash-config-manager/
 
 ---
 
-## ⚙️ 配置说明
+##  配置说明
 
 ### config.ini 主要配置
 
@@ -102,11 +108,11 @@ YOUR_PROVIDER = https://your-subscription-url
 
 [regions]
 # 地区分组配置
-香港 = 🇭🇰,Hong Kong,HK,香港
-台湾 = 🇹🇼,Taiwan,TW,台湾
-日本 = 🇯🇵,Japan,JP,日本
-美国 = 🇺🇸,United States,US,美国
-新加坡 = 🇸🇬,Singapore,SG,新加坡
+香港 = ,Hong Kong,HK,香港
+台湾 = ,Taiwan,TW,台湾
+日本 = ,Japan,JP,日本
+美国 = ,United States,US,美国
+新加坡 = ,Singapore,SG,新加坡
 
 [filter]
 # 节点过滤规则
@@ -121,14 +127,14 @@ update_interval = 3600
 
 ---
 
-## 📊 Web 管理界面
+##  Web 管理界面
 
 访问 `http://your-server/` 可查看：
 
-- 📊 服务状态信息
-- 📁 配置文件状态
-- 🔄 触发配置更新
-- 🔌 API 接口文档
+-  服务状态信息
+-  配置文件状态
+-  触发配置更新
+-  API 接口文档
 
 ### API 接口
 
@@ -136,11 +142,64 @@ update_interval = 3600
 |------|------|------|
 | `/` | GET | Web 管理界面 |
 | `/status` | GET | 服务状态（JSON） |
-| `/update-config` | POST | 触发配置更新 |
+| `/update-config` | POST | 触发配置更新（可选 Bearer 令牌鉴权） |
+| `/webhook/github` | POST | GitHub Webhook（HMAC 校验，需配置 `WEBHOOK_SECRET`） |
+| `/clash_profile.yaml` | GET | 获取生成的 Clash 配置 |
+
+### 自动更新
+
+Web 应用启动后按 `config.ini` 中 `[server] update_interval`（秒）定时重新生成配置，
+也可通过环境变量 `UPDATE_INTERVAL` 覆盖。设为 `0` 或负值可关闭自动更新。
+启动时若输出配置尚不存在，会立即在后台生成一次。
+
+### 更新令牌与 Webhook
+
+通过环境变量配置（`docker-compose.yml` 或启动环境）：
+
+- `UPDATE_TOKEN` - 设置后 `/update-config` 需要携带 `Authorization: Bearer <token>`
+- `WEBHOOK_SECRET` - 同时作为 `/update-config` 的令牌和 GitHub Webhook 的 HMAC 密钥
+
+GitHub Webhook 配置：Payload URL 指向 `https://your-domain.com/webhook/github`，
+Content type 选 `application/json`，Secret 填 `WEBHOOK_SECRET` 的值。
+
+### 单一供应商模式
+
+在 `config.ini` 中可以维护任意数量的订阅源，但通过 `active_provider` 指定**唯一**参与生成的供应商：
+
+```ini
+[proxy_providers]
+XXAI = https://your-subscription-url-1
+NAIYUN = https://your-subscription-url-2
+KITTY = https://your-subscription-url-3
+
+[provider_control]
+active_provider = XXAI
+```
+
+上述配置会生成只包含 XXAI 的配置；NAIYUN、KITTY 保留在文件中但不参与任何组。
+`active_provider` 为必填项，未配置时生成会失败并保留旧配置；环境变量
+`ACTIVE_PROVIDER` 可覆盖此配置，便于不修改文件的情况下在 Docker 部署中切换。
+若指定的提供者不存在，生成同样会失败并保留旧配置。
+
+生成时系统会直接拉取 `active_provider` 的原始订阅链接，解析出节点后
+将节点列表内嵌进生成配置（顶部 `proxies:` 字段），不再生成 proxy-providers，
+也不依赖客户端运行时拉取订阅。
+
+### 地区组
+
+为 `[regions]` 中每个匹配到节点的地区生成一个地区组（如 `香港`），
+组内显式列出名称匹配该地区关键词的节点；没有匹配节点的地区不会生成组。
+地区组类型由 `[merged_regions]` 配置（`default_type` 和各地区覆盖）。
+
+### 配置校验与备份
+
+- 生成前自动校验：代理组名称唯一、引用完整、类型合法、规则格式正确，校验失败不会覆盖旧配置
+- 每次覆盖前自动备份到 `backups/`，保留数量由 `[server] backup_keep` 控制（默认 10）
+- 规则文件检查工具：`python scripts/lint_rules.py`（重复规则、重叠 CIDR、无效引用等）
 
 ---
 
-## 🔧 常用命令
+##  常用命令
 
 ```bash
 # 查看容器状态
@@ -161,9 +220,9 @@ docker compose exec clash-config-manager python main.py
 
 ---
 
-## 🔒 安全提示
+##  安全提示
 
-⚠️ **重要**：不要将以下文件提交到 Git：
+ **重要**：不要将以下文件提交到 Git：
 
 - `config/config.ini` - 包含订阅链接
 - `output/clash_profile.yaml` - 包含节点信息
@@ -172,19 +231,19 @@ docker compose exec clash-config-manager python main.py
 
 ---
 
-## 📖 文档
+##  文档
 
 - **[config/config.ini.example](config/config.ini.example)** - 配置示例
 - **[config/rules.yaml](config/rules.yaml)** - 规则配置
 
 ---
 
-## 🤝 贡献
+##  贡献
 
 欢迎提交 Issue 和 Pull Request！
 
 ---
 
-## 📄 许可证
+##  许可证
 
 MIT License

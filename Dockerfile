@@ -2,7 +2,7 @@
 # 多阶段构建，优化镜像大小
 
 # ==================== 构建阶段 ====================
-FROM python:3.9-slim AS builder
+FROM python:3.12-slim AS builder
 
 # 设置工作目录
 WORKDIR /build
@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir --user \
     -r requirements.txt
 
 # ==================== 运行阶段 ====================
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
@@ -61,16 +61,18 @@ USER appuser
 
 # 设置Python路径（包含用户安装的包）
 ENV PATH="/home/appuser/.local/bin:${PATH}" \
-    PYTHONPATH="/home/appuser/.local/lib/python3.9/site-packages:${PYTHONPATH}"
+    PYTHONPATH="/home/appuser/.local/lib/python3.12/site-packages:${PYTHONPATH}"
 
 # 暴露端口（Flask 默认端口）
 EXPOSE 5000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:5000/status || exit 1
+    CMD curl -f "http://localhost:${APP_PORT:-5000}/status" || exit 1
 
 # 启动应用
 # 使用 gunicorn 作为生产级 WSGI 服务器
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "--timeout", "120", "--access-logfile", "logs/access.log", "--error-logfile", "logs/error.log", "src.app:app"]
+# 单 worker + 多线程：自动更新调度与 last_update 状态需进程内一致
+# 端口由 APP_PORT 环境变量控制（默认 5000）
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${APP_PORT:-5000} --workers 1 --threads 8 --timeout 120 --access-logfile logs/access.log --error-logfile logs/error.log src.app:app"]
 

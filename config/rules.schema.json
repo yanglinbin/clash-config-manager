@@ -38,61 +38,63 @@
       }
     },
     "proxy_groups": {
-      "type": "array",
-      "description": "Proxy groups configuration",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "type": {
-            "type": "string",
-            "enum": ["select", "url-test", "fallback", "load-balance", "relay"]
-          },
-          "use": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "proxies": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "url": {
-            "type": "string",
-            "format": "uri"
-          },
-          "interval": {
-            "type": "integer",
-            "minimum": 60
-          },
-          "tolerance": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "lazy": {
-            "type": "boolean"
-          },
-          "disable-udp": {
-            "type": "boolean"
-          },
-          "filter": {
-            "type": "string"
-          },
-          "exclude-filter": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
+      "type": "object",
+      "description": "Proxy groups configuration (main_groups + special_groups)",
+      "properties": {
+        "main_groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "enum": ["select", "url-test", "fallback", "load-balance", "relay"]
+              },
+              "proxies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "type"],
+            "additionalProperties": false
           }
         },
-        "required": ["name", "type"],
-        "additionalProperties": false
+        "special_groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "enum": ["select", "url-test", "fallback", "load-balance", "relay"]
+              },
+              "proxies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "type", "proxies"],
+            "additionalProperties": false
+          }
+        }
       }
     },
     "custom_rules": {
@@ -102,9 +104,9 @@
         "type": "string",
         "pattern": "^(DOMAIN|DOMAIN-SUFFIX|DOMAIN-KEYWORD|IP-CIDR|IP-CIDR6|GEOIP|SRC-IP-CIDR|SRC-PORT|DST-PORT|PROCESS-NAME|PROCESS-PATH|RULE-SET|MATCH|AND|OR|NOT|SUB-RULE),",
         "examples": [
-          "DOMAIN-SUFFIX,example.com,🚀海外代理",
-          "IP-CIDR,192.168.1.0/24,🌐全球直连",
-          "PROCESS-NAME,chrome.exe,🚀海外代理"
+          "DOMAIN-SUFFIX,example.com,海外代理",
+          "IP-CIDR,192.168.1.0/24,全球直连",
+          "PROCESS-NAME,chrome.exe,海外代理"
         ]
       }
     },

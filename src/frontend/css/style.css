@@ -73,6 +73,29 @@ button:active {
     transform: translateY(1px);
 }
 
+button:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.token-row {
+    margin-bottom: 12px;
+}
+
+.token-row label {
+    margin-right: 8px;
+    font-weight: bold;
+}
+
+.token-row input {
+    padding: 8px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    width: 260px;
+    font-size: 14px;
+}
+
 .api-list {
     background: #f8f9fa;
     padding: 15px;

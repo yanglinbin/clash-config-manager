@@ -97,8 +97,8 @@ rule-providers:
   Microsoft:
     type: http
     behavior: classical
-    url: "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/refs/heads/master/Clash/Microsoft.list"
-    path: ./ruleset/applications.yaml
+    url: "https://raw.githubusercontent.com/yanglinbin/clash-config-manager/refs/heads/main/clash/Microsoft.txt"
+    path: ./ruleset/Microsoft.yaml
     interval: 86400
 
 # 代理组配置

@@ -25,9 +25,17 @@ ENV PYTHONUNBUFFERED=1 \
     TZ=Asia/Shanghai \
     APP_HOME=/app
 
-# 配置阿里云镜像源加速 apt 下载
-RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list && \
-    sed -i 's|http://security.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list
+# 配置阿里云镜像源加速 apt 下载（兼容旧 sources.list 与新 deb822 格式）
+RUN if [ -f /etc/apt/sources.list ]; then \
+        sed -i -e 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
+               -e 's|http://security.debian.org|http://mirrors.aliyun.com|g' \
+               /etc/apt/sources.list; \
+    fi && \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i -e 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
+               -e 's|http://security.debian.org|http://mirrors.aliyun.com|g' \
+               /etc/apt/sources.list.d/debian.sources; \
+    fi
 
 # 安装必要的系统工具
 RUN apt-get update && \

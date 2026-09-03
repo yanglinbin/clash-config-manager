@@ -8,6 +8,7 @@ Clash 配置生成器 - 服务器版本
 import json
 import os
 import base64
+import re
 import sys
 import time
 import configparser
@@ -753,6 +754,286 @@ class ClashConfigGenerator:
 
         return rules
 
+    # ============ Provider 模式（配置写入订阅链接，节点由客户端拉取） ============
+
+    def _embed_nodes_enabled(self) -> bool:
+        """是否把节点内嵌进生成配置。
+
+        默认 False：生成 clash_profile.yaml 时只写入 proxy-providers 订阅链接，
+        节点由 Clash/Mihomo 客户端自行拉取，服务器无需访问订阅源。
+        """
+        return self.config.getboolean("clash", "embed_nodes", fallback=False)
+
+    def _provider_names(self) -> List[str]:
+        """当前参与生成的提供者名称（proxy-providers 的 use 引用用）。"""
+        return list(self.get_proxy_providers().keys())
+
+    def _keywords_to_filter(self, keywords: List[str]) -> str:
+        """把地区关键词列表转成 Mihomo 策略组 filter 正则。"""
+        parts = [re.escape(kw) for kw in keywords if kw.strip()]
+        if not parts:
+            return ""
+        return "(?i)" + "|".join(parts)
+
+    def generate_proxy_providers_config(self) -> Dict[str, Any]:
+        """生成 proxy-providers 配置（订阅链接写进配置，客户端定时拉取）。"""
+        providers = self.get_proxy_providers()
+        test_url = self._get_test_url()
+        result = {}
+        for name, url in providers.items():
+            result[name] = {
+                "type": "http",
+                "url": url,
+                "interval": 3600,
+                "path": f"./providers/{name}.yaml",
+                "health-check": {
+                    "enable": True,
+                    "url": test_url,
+                    "interval": 300,
+                },
+            }
+            logger.info(f"写入 proxy-provider: {name}")
+        return result
+
+    def _create_provider_group_config(
+        self,
+        name: str,
+        group_type: str,
+        use_providers: List[str],
+        test_url: str,
+        filter_expr: str = "",
+    ) -> Dict[str, Any]:
+        """创建基于 provider 的策略组（use + 可选 filter），复用通用类型参数。"""
+        group_config = self._create_proxy_group_config(
+            name=name,
+            group_type=group_type,
+            proxies=[],
+            test_url=test_url,
+        )
+        group_config.pop("proxies", None)
+        group_config["use"] = use_providers
+        if filter_expr:
+            group_config["filter"] = filter_expr
+        return group_config
+
+    def generate_region_groups_provider(
+        self, regions: Dict[str, Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Provider 模式地区组：use 订阅源 + filter 按关键词匹配节点名。"""
+        region_groups = []
+        test_url = self._get_test_url()
+        default_type = self.config.get("clash", "default_group_type", fallback="fallback")
+        use_providers = self._provider_names()
+
+        for region_name, region_config in regions.items():
+            filter_expr = self._keywords_to_filter(region_config["keywords"])
+            if not filter_expr:
+                logger.warning(f"地区 {region_name} 没有可用关键词，跳过该地区组")
+                continue
+            group_type = self._get_group_type(region_name, default_type)
+            region_groups.append(
+                self._create_provider_group_config(
+                    name=region_name,
+                    group_type=group_type,
+                    use_providers=use_providers,
+                    test_url=test_url,
+                    filter_expr=filter_expr,
+                )
+            )
+            logger.info(
+                f"创建地区组: {region_name} (类型: {group_type}, filter 匹配)"
+            )
+
+        logger.info(f"生成了 {len(region_groups)} 个地区组")
+        return region_groups
+
+    def generate_custom_groups_provider(
+        self, regions: Dict[str, Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Provider 模式自定义节点组：按选中地区的关键词生成 filter。"""
+        custom_groups = []
+        if not self.config.has_section("custom_groups"):
+            return custom_groups
+
+        test_url = self._get_test_url()
+        use_providers = self._provider_names()
+
+        for group_name, config_str in self.config["custom_groups"].items():
+            try:
+                parts = [p.strip() for p in config_str.split(",")]
+                if len(parts) < 3:
+                    logger.warning(f"自定义组 {group_name} 配置不完整，跳过")
+                    continue
+
+                group_type = parts[0]
+                regions_str = parts[2]
+                target_groups_str = parts[3] if len(parts) > 3 else ""
+                target_groups = (
+                    [g.strip() for g in target_groups_str.split("|")]
+                    if target_groups_str
+                    else []
+                )
+
+                if not regions_str:
+                    logger.warning(f"自定义组 {group_name} 没有指定地区，跳过")
+                    continue
+
+                selected_regions = [r.strip() for r in regions_str.split("|")]
+                keywords = []
+                for region_name in selected_regions:
+                    if region_name in regions:
+                        keywords.extend(regions[region_name]["keywords"])
+                if not keywords:
+                    logger.warning(
+                        f"自定义组 {group_name} 没有有效的地区关键词，跳过"
+                    )
+                    continue
+
+                group_config = self._create_provider_group_config(
+                    name=group_name,
+                    group_type=group_type,
+                    use_providers=use_providers,
+                    test_url=test_url,
+                    filter_expr=self._keywords_to_filter(keywords),
+                )
+                group_config["_target_groups"] = target_groups
+                custom_groups.append(group_config)
+                logger.info(
+                    f"创建自定义节点组: {group_name} "
+                    f"(类型: {group_type}, 地区: {regions_str}, filter 匹配)"
+                )
+            except Exception as e:
+                logger.error(f"解析自定义组 {group_name} 配置失败: {e}")
+                continue
+
+        if custom_groups:
+            logger.info(f"生成了 {len(custom_groups)} 个自定义节点组")
+        return custom_groups
+
+    def generate_main_proxy_groups_provider(
+        self,
+        region_group_names: List[str],
+        custom_groups: List[Dict[str, Any]],
+        use_providers: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Provider 模式主组：引用地区/自定义组 + DIRECT，并挂 provider 全部节点。"""
+        proxy_defaults = self._get_proxy_defaults()
+
+        custom_region_groups = {}
+        if self.config.has_section("main_proxy_region_groups"):
+            for group_name, regions_str in self.config[
+                "main_proxy_region_groups"
+            ].items():
+                custom_region_groups[group_name] = [
+                    r.strip() for r in regions_str.split(",")
+                ]
+
+        relay_group_name = None
+        if self.config.has_section("relay_groups"):
+            relay_group_name = self.config.get(
+                "relay_groups", "name", fallback="统一代理"
+            )
+
+        proxy_groups_config = self.rules_config.get("proxy_groups", {})
+        main_groups = []
+
+        for group_config in proxy_groups_config.get("main_groups", []):
+            group_name = group_config["name"]
+            default_node = proxy_defaults.get(group_name, None)
+
+            proxies: List[str] = []
+            seen: Set[str] = set()
+            if default_node:
+                proxies.append(default_node)
+                seen.add(default_node)
+
+            if group_name in custom_region_groups:
+                region_list = custom_region_groups[group_name]
+                if len(region_list) == 1 and region_list[0].lower() == "manual":
+                    logger.info(
+                        f"主代理组 {group_name} 设置为手动模式，不自动添加任何地区节点"
+                    )
+                    region_candidates = []
+                else:
+                    region_candidates = [
+                        name for name in region_group_names if name in region_list
+                    ]
+            else:
+                region_candidates = region_group_names
+
+            for region_name in region_candidates:
+                if region_name not in seen:
+                    proxies.append(region_name)
+                    seen.add(region_name)
+
+            for custom_group in custom_groups:
+                custom_group_name = custom_group["name"]
+                target_groups = custom_group.get("_target_groups", [])
+                if (
+                    not target_groups or group_name in target_groups
+                ) and custom_group_name not in seen:
+                    proxies.append(custom_group_name)
+                    seen.add(custom_group_name)
+
+            if relay_group_name:
+                if default_node == relay_group_name:
+                    if relay_group_name not in seen:
+                        proxies.insert(0, relay_group_name)
+                        seen.add(relay_group_name)
+                elif (
+                    relay_group_name not in seen
+                    and self._should_include_relay_group(group_name)
+                ):
+                    proxies.append(relay_group_name)
+                    seen.add(relay_group_name)
+
+            if "DIRECT" not in seen:
+                proxies.append("DIRECT")
+
+            group = {
+                "name": group_name,
+                "type": group_config["type"],
+                "proxies": proxies,
+                "use": use_providers,
+            }
+            main_groups.append(group)
+
+        for group_config in proxy_groups_config.get("special_groups", []):
+            main_groups.append(
+                {
+                    "name": group_config["name"],
+                    "type": group_config["type"],
+                    "proxies": group_config["proxies"],
+                }
+            )
+
+        return main_groups
+
+    def _generate_all_proxy_groups_provider(
+        self, regions: Dict[str, Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Provider 模式：生成中继/主组/地区组/自定义组，不拉取任何节点。"""
+        region_group_names = list(regions.keys())
+        use_providers = self._provider_names()
+
+        relay_groups = self.generate_relay_group(region_group_names)
+        custom_groups = self.generate_custom_groups_provider(regions)
+        region_groups = self.generate_region_groups_provider(regions)
+        main_groups = self.generate_main_proxy_groups_provider(
+            region_group_names, custom_groups, use_providers
+        )
+
+        all_groups = []
+        if relay_groups:
+            all_groups.extend(relay_groups)
+        all_groups.extend(main_groups)
+        all_groups.extend(region_groups)
+        all_groups.extend(
+            {k: v for k, v in custom_group.items() if not k.startswith("_")}
+            for custom_group in custom_groups
+        )
+        return all_groups
+
     def _generate_all_proxy_groups(
         self, usable: List[Dict[str, Any]], regions: Dict[str, Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
@@ -797,7 +1078,11 @@ class ClashConfigGenerator:
         return all_groups
 
     def generate_config(self) -> Dict[str, Any]:
-        """生成完整的 Clash 配置"""
+        """生成完整的 Clash 配置。
+
+        Provider 模式（默认，embed_nodes=false）：只把订阅链接写入
+        proxy-providers，由客户端拉取节点；内嵌模式才会在服务器拉取订阅。
+        """
         providers = self.get_proxy_providers()
         regions = self.get_regions()
 
@@ -808,12 +1093,7 @@ class ClashConfigGenerator:
         logger.info(f"找到 {len(providers)} 个代理提供者: {list(providers.keys())}")
         logger.info(f"找到 {len(regions)} 个地区配置: {list(regions.keys())}")
 
-        # 直接拉取活动提供者的原始订阅并解析节点（失败则终止，保留旧配置）
-        nodes = self._get_active_nodes()
-        usable = self._usable_nodes(nodes)
-
-        # 生成配置
-        config = {
+        base_config = {
             "port": self.config.getint("clash", "port", fallback=7890),
             "socks-port": self.config.getint("clash", "socks_port", fallback=7891),
             "allow-lan": self.config.getboolean("clash", "allow_lan", fallback=True),
@@ -822,11 +1102,26 @@ class ClashConfigGenerator:
             "external-controller": self.config.get(
                 "clash", "external_controller", fallback=":9090"
             ),
-            "proxies": usable,
-            "proxy-groups": self._generate_all_proxy_groups(usable, regions),
             "rule-providers": self.get_rule_providers(),
             "rules": self.get_custom_rules(),
         }
+
+        if self._embed_nodes_enabled():
+            # 内嵌模式：服务器直接拉取订阅并解析节点写入配置
+            nodes = self._get_active_nodes()
+            usable = self._usable_nodes(nodes)
+            config = dict(base_config)
+            config["proxies"] = usable
+            config["proxy-groups"] = self._generate_all_proxy_groups(
+                usable, regions
+            )
+        else:
+            # Provider 模式：只写订阅链接，节点由客户端拉取
+            config = dict(base_config)
+            config["proxy-providers"] = self.generate_proxy_providers_config()
+            config["proxy-groups"] = self._generate_all_proxy_groups_provider(
+                regions
+            )
 
         return config
 
@@ -850,6 +1145,7 @@ class ClashConfigGenerator:
                 group_names.append(name)
         name_set = set(group_names)
         node_names = {str(p.get("name", "")) for p in config.get("proxies", [])}
+        provider_names = set(config.get("proxy-providers", {}))
 
         for group in groups:
             gname = group.get("name", "?")
@@ -863,6 +1159,19 @@ class ClashConfigGenerator:
             gtype = group.get("type", "")
             if gtype not in VALID_GROUP_TYPES:
                 errors.append(f"代理组 {gname} 使用了无效类型: {gtype or '(空)'}")
+            for use_name in group.get("use", []):
+                if use_name not in provider_names:
+                    errors.append(
+                        f"代理组 {gname} 使用了不存在的提供者: {use_name}"
+                    )
+            filter_expr = group.get("filter")
+            if filter_expr:
+                try:
+                    re.compile(filter_expr)
+                except re.error as e:
+                    errors.append(
+                        f"代理组 {gname} 的 filter 正则无效: {filter_expr}（{e}）"
+                    )
 
         for rule in config.get("rules", []):
             error = check_rule(str(rule), name_set)
@@ -902,7 +1211,8 @@ class ClashConfigGenerator:
             # 输出统计信息（供 Web 状态页展示）
             stats = {
                 "generated_at": datetime.now().isoformat(timespec="seconds"),
-                "providers": 1 if config.get("proxies") else 0,
+                "providers": len(config.get("proxy-providers", {}))
+                or (1 if config.get("proxies") else 0),
                 "providers_total": (
                     len(self.config["proxy_providers"])
                     if self.config.has_section("proxy_providers")

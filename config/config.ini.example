@@ -45,7 +45,7 @@ rules_config = config/rules.yaml
 
 # 可选：远程规则地址。配置后每次生成前会先拉取最新 rules.yaml；
 # 拉取失败自动回退本地 rules_config，环境变量 RULES_URL 可覆盖此值。
-# rules_url = https://raw.githubusercontent.com/yanglinbin/Clash-Config-Manager/refs/heads/main/config/rules.yaml
+# rules_url = https://cdn.jsdelivr.net/gh/yanglinbin/Clash-Config-Manager@main/config/rules.yaml
 
 [clash]
 # 生成 Clash 配置的基础参数
@@ -56,6 +56,10 @@ mode = Rule
 log_level = info
 external_controller = :9090
 test_url = http://connectivitycheck.gstatic.com/generate_204
+
+# 节点来源：false=把订阅链接写入 proxy-providers，由客户端拉取（默认，推荐）
+#           true=服务器拉取订阅并把节点内嵌到生成的配置
+embed_nodes = false
 
 # 地区组默认类型（可选；会被 [merged_regions] 的 default_type 覆盖）
 # 可选: select / url-test / fallback / load-balance

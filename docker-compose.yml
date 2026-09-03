@@ -18,14 +18,12 @@ services:
     
     # 卷挂载
     volumes:
-      # 配置目录（挂载整个目录以解决文件更新问题）
+      # 配置目录（只读挂载；远程 rules.yaml 拉取在内存中完成，不写回 config/）
       - ./config:/app/config:ro
       # 输出目录（生成的配置文件）
       - ./output:/app/output
       # 日志目录
       - ./logs:/app/logs
-      # 备份目录（可选）
-      - ./backups:/app/backups
     
     # 环境变量
     environment:
@@ -37,12 +35,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # 更新间隔（秒）
       - UPDATE_INTERVAL=${UPDATE_INTERVAL:-3600}
-      # 单一供应商模式：只使用指定的提供者（留空=全部使用）
+      # 单一供应商模式：指定要使用的提供者（留空则使用 config.ini 的 active_provider）
       - ACTIVE_PROVIDER=${ACTIVE_PROVIDER:-}
       # 更新令牌：/update-config 接口的 Bearer 令牌（可选）
       - UPDATE_TOKEN=${UPDATE_TOKEN:-}
-      # Webhook密钥：GitHub Webhook HMAC 校验；同时作为 /update-config 的令牌
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      # 远程 rules.yaml 地址（可选；覆盖 config.ini 的 [files] rules_url）
+      - RULES_URL=${RULES_URL:-}
     
     # 健康检查
     healthcheck:

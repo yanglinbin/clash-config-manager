@@ -27,16 +27,9 @@ from typing import Dict, List, Set, Tuple
 
 import yaml
 
-
-BUILTIN_PROXIES = {"DIRECT", "REJECT", "REJECT-DROP", "PASS", "GLOBAL"}
-
-VALID_RULE_TYPES = {
-    "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-REGEX",
-    "IP-CIDR", "IP-CIDR6", "GEOIP", "GEOSITE",
-    "SRC-IP-CIDR", "SRC-PORT", "DST-PORT", "SRC-IP-ASN",
-    "PROCESS-NAME", "PROCESS-PATH", "RULE-SET", "MATCH",
-    "AND", "OR", "NOT", "SUB-RULE",
-}
+# 共享的规则常量与解析/校验逻辑（与配置生成器保持一致）
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from clash_rules import check_rule, parse_rule
 
 
 def load_rules(path: Path) -> dict:
@@ -56,17 +49,6 @@ def collect_group_names(data: dict) -> Set[str]:
             if isinstance(group, dict) and group.get("name"):
                 names.add(group["name"])
     return names
-
-
-def parse_rule(rule: str) -> Tuple[str, List[str]]:
-    fields = [part.strip() for part in rule.split(",")]
-    return fields[0], fields
-
-
-def rule_target(rule_type: str, fields: List[str]) -> str | None:
-    if rule_type == "MATCH":
-        return fields[1] if len(fields) >= 2 else None
-    return fields[2] if len(fields) >= 3 else None
 
 
 def lint(path: Path) -> Tuple[List[str], List[str]]:
@@ -122,21 +104,14 @@ def lint(path: Path) -> Tuple[List[str], List[str]]:
     domain_targets: Dict[str, Set[str]] = {}
     for rule in all_rules:
         rule_type, fields = parse_rule(rule)
-        if rule_type not in VALID_RULE_TYPES:
-            errors.append(f"未知规则类型: {rule}")
+        error = check_rule(rule, group_names)
+        if error:
+            errors.append(error)
             continue
         if rule_type == "DOMAIN-SUFFIX" and len(fields) >= 2 and fields[1].startswith("*."):
             errors.append(f"DOMAIN-SUFFIX 无需 '*. ' 前缀: {rule}")
         if rule_type in ("DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD") and len(fields) >= 3:
             domain_targets.setdefault(f"{rule_type}:{fields[1]}", set()).add(fields[2])
-        if len(fields) < 2:
-            errors.append(f"规则格式不完整: {rule}")
-            continue
-        target = rule_target(rule_type, fields)
-        if target is None:
-            errors.append(f"规则缺少目标代理组: {rule}")
-        elif target not in group_names and target not in BUILTIN_PROXIES:
-            errors.append(f"规则指向不存在的代理组 '{target}': {rule}")
         if re.search(r",\s", rule):
             warnings.append(f"规则逗号后带空格（建议去掉）: {rule}")
 

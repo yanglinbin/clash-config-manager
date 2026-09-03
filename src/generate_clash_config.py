@@ -2,13 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 Clash 配置生成器 - 服务器版本
-支持动态生成代理组、生成前校验、原子写入和自动备份
+支持动态生成代理组、生成前校验和原子写入
 """
 
 import json
 import os
 import base64
-import shutil
 import sys
 import time
 import configparser
@@ -17,9 +16,12 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Set, Tuple
 
 import yaml
+
+# 与规则 lint 工具共用的常量与校验逻辑
+from clash_rules import BUILTIN_PROXIES, check_rule
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -37,20 +39,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Clash 内置的代理关键字（引用检查时无需匹配代理组）
-BUILTIN_PROXIES = {"DIRECT", "REJECT", "REJECT-DROP", "PASS", "GLOBAL"}
-
 # 允许的代理组类型
 VALID_GROUP_TYPES = {"select", "url-test", "fallback", "load-balance", "relay"}
-
-# 允许的规则类型（用于生成前基础校验）
-VALID_RULE_TYPES = {
-    "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-REGEX",
-    "IP-CIDR", "IP-CIDR6", "GEOIP", "GEOSITE",
-    "SRC-IP-CIDR", "SRC-PORT", "DST-PORT", "SRC-IP-ASN",
-    "PROCESS-NAME", "PROCESS-PATH", "RULE-SET", "MATCH",
-    "AND", "OR", "NOT", "SUB-RULE",
-}
 
 
 class ClashConfigGenerator:
@@ -91,7 +81,7 @@ class ClashConfigGenerator:
 
         try:
             with open(self.rules_file, "r", encoding="utf-8") as f:
-                self.rules_config = yaml.safe_load(f)
+                self.rules_config = self._parse_rules_yaml(f.read())
             logger.info(f"已加载规则配置文件: {self.rules_file}")
         except yaml.YAMLError as e:
             logger.error(f"规则配置文件格式错误: {e}")
@@ -99,6 +89,50 @@ class ClashConfigGenerator:
         except Exception as e:
             logger.error(f"加载规则配置文件失败: {e}")
             sys.exit(1)
+
+    def _parse_rules_yaml(self, text: str) -> Dict[str, Any]:
+        """解析 rules.yaml 文本并校验顶层必须是映射。"""
+        data = yaml.safe_load(text)
+        if not isinstance(data, dict):
+            raise ValueError("rules.yaml 顶层必须是映射")
+        return data
+
+    def _get_rules_url(self) -> str:
+        """获取远程 rules.yaml 地址（RULES_URL 环境变量 > [files] rules_url）。"""
+        env_value = os.environ.get("RULES_URL")
+        if env_value and env_value.strip():
+            return env_value.strip()
+        return self.config.get("files", "rules_url", fallback="").strip()
+
+    def refresh_rules_from_remote(self) -> bool:
+        """按配置从远程（如 GitHub）拉取最新 rules.yaml。
+
+        成功时替换 self.rules_config 并返回 True；失败时保留现有规则配置并告警，
+        不阻断生成（由 run() 决定是否回退本地规则重试）。
+        """
+        url = self._get_rules_url()
+        if not url:
+            return False
+
+        logger.info(f"正在从远程拉取规则配置: {url[:100]}...")
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "clash-config-manager", "Accept": "*/*"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                text = resp.read().decode("utf-8", errors="replace")
+            self.rules_config = self._parse_rules_yaml(text)
+        except Exception as e:
+            logger.warning(
+                f"远程拉取 rules.yaml 失败: {e}；继续使用本地规则配置"
+            )
+            return False
+
+        logger.info(
+            f"远程规则配置已加载: {len(self.rules_config)} 个顶层键"
+        )
+        return True
 
     def _get_active_provider(self) -> Optional[str]:
         """获取当前唯一启用的提供者（必填）。
@@ -328,18 +362,44 @@ class ClashConfigGenerator:
 
         return group_config
 
+    def _build_region_matches(
+        self,
+        usable: List[Dict[str, Any]],
+        regions: Dict[str, Dict[str, Any]],
+    ) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, Set[str]]]:
+        """一次性完成全部地区的节点匹配（关键词匹配只执行一次）。
+
+        返回:
+          region_nodes: 地区名 -> 匹配节点列表（保持可用节点顺序）
+          region_index: 节点名 -> 命中的地区名集合
+        """
+        region_nodes: Dict[str, List[Dict[str, Any]]] = {}
+        region_index: Dict[str, Set[str]] = {}
+        for region_name, region_config in regions.items():
+            matched = self._match_nodes(usable, region_config["keywords"])
+            region_nodes[region_name] = matched
+            for node in matched:
+                region_index.setdefault(str(node["name"]), set()).add(region_name)
+        return region_nodes, region_index
+
+    def _get_proxy_defaults(self) -> Dict[str, str]:
+        """读取各代理组配置的默认节点。"""
+        defaults = {}
+        if self.config.has_section("proxy_group_defaults"):
+            for group_name, default_node in self.config["proxy_group_defaults"].items():
+                if default_node:
+                    defaults[group_name] = default_node
+        return defaults
+
     def generate_region_groups(
-        self, nodes: List[Dict[str, Any]], regions: Dict[str, Dict[str, Any]]
+        self, region_nodes: Dict[str, List[Dict[str, Any]]]
     ) -> List[Dict[str, Any]]:
         """生成地区组（每个地区一个组，显式列出匹配关键词的节点）"""
         region_groups = []
         test_url = self._get_test_url()
         default_type = self.config.get("clash", "default_group_type", fallback="fallback")
-        usable = self._usable_nodes(nodes)
 
-        for region_name, region_config in regions.items():
-            keywords = region_config["keywords"]
-            matched = self._match_nodes(usable, keywords)
+        for region_name, matched in region_nodes.items():
             if not matched:
                 logger.warning(f"地区 {region_name} 没有匹配到节点，跳过该地区组")
                 continue
@@ -361,7 +421,10 @@ class ClashConfigGenerator:
         return region_groups
 
     def generate_custom_groups(
-        self, nodes: List[Dict[str, Any]], regions: Dict[str, Dict[str, Any]]
+        self,
+        usable: List[Dict[str, Any]],
+        region_nodes: Dict[str, List[Dict[str, Any]]],
+        region_index: Dict[str, Set[str]],
     ) -> List[Dict[str, Any]]:
         """生成自定义节点组"""
         custom_groups = []
@@ -370,7 +433,6 @@ class ClashConfigGenerator:
             return custom_groups
 
         test_url = self._get_test_url()
-        usable = self._usable_nodes(nodes)
 
         # 遍历所有自定义组配置
         for group_name, config_str in self.config["custom_groups"].items():
@@ -382,8 +444,7 @@ class ClashConfigGenerator:
                     continue
 
                 group_type = parts[0]
-                # 提供者列表字段在单一供应商模式下不再参与匹配，仅占位解析
-                providers_str = parts[1]
+                # parts[1] 为提供者占位字段（单一供应商模式下不参与匹配）
                 regions_str = parts[2]
                 target_groups_str = parts[3] if len(parts) > 3 else ""
 
@@ -393,25 +454,26 @@ class ClashConfigGenerator:
                 else:
                     target_groups = []  # 空表示添加到所有主代理组
 
-                # 解析地区列表并筛选节点
-                if regions_str:
-                    selected_regions = [r.strip() for r in regions_str.split("|")]
-                    keywords = []
-                    for region_name in selected_regions:
-                        if region_name in regions:
-                            keywords.extend(regions[region_name]["keywords"])
-
-                    if not keywords:
-                        logger.warning(
-                            f"自定义组 {group_name} 没有有效的地区关键词，跳过"
-                        )
-                        continue
-                    matched = self._match_nodes(usable, keywords)
-                    if not matched:
-                        logger.warning(f"自定义组 {group_name} 没有匹配到节点，跳过")
-                        continue
-                else:
+                # 地区匹配已在 _build_region_matches 中完成，这里只按地区集合筛选
+                if not regions_str:
                     logger.warning(f"自定义组 {group_name} 没有指定地区，跳过")
+                    continue
+
+                selected_regions = [r.strip() for r in regions_str.split("|")]
+                valid_regions = [r for r in selected_regions if r in region_nodes]
+                if not valid_regions:
+                    logger.warning(
+                        f"自定义组 {group_name} 没有有效的地区关键词，跳过"
+                    )
+                    continue
+
+                region_set = set(valid_regions)
+                matched = [
+                    n for n in usable
+                    if region_index.get(str(n.get("name", "")), set()) & region_set
+                ]
+                if not matched:
+                    logger.warning(f"自定义组 {group_name} 没有匹配到节点，跳过")
                     continue
 
                 # 创建自定义组配置（组名直接使用配置中的名称）
@@ -446,21 +508,8 @@ class ClashConfigGenerator:
 
         return custom_groups
 
-    def _get_region_group_names(
-        self,
-        nodes: List[Dict[str, Any]],
-        regions: Dict[str, Dict[str, Any]],
-    ) -> List[str]:
-        """获取所有实际会生成的地区组名称（只保留匹配到节点的地区）"""
-        region_group_names = []
-        usable = self._usable_nodes(nodes)
-        for region_name, region_config in regions.items():
-            if self._match_nodes(usable, region_config["keywords"]):
-                region_group_names.append(region_name)
-        return region_group_names
-
     def generate_relay_group(
-        self, nodes: List[Dict[str, Any]], regions: Dict[str, Dict[str, Any]]
+        self, region_group_names: List[str]
     ) -> List[Dict[str, Any]]:
         """生成中继代理组，包含所有已生成地区的地区组"""
         relay_groups = []
@@ -482,26 +531,20 @@ class ClashConfigGenerator:
         if included_regions_str:
             included_regions = [r.strip() for r in included_regions_str.split(",")]
         else:
-            included_regions = list(regions.keys())
+            included_regions = region_group_names
 
-        # 创建中继组，使用实际存在的地区组作为节点
-        existing_region_names = self._get_region_group_names(nodes, regions)
-        proxies = []
-        for region_name in included_regions:
-            if region_name not in existing_region_names:
-                continue
-            proxies.append(region_name)
+        # 创建中继组，只引用实际会生成的地区组
+        proxies = [
+            region_name for region_name in included_regions
+            if region_name in region_group_names
+        ]
 
         if not proxies:
             logger.warning("中继组没有可用的节点，跳过生成")
             return relay_groups
 
         # 检查是否有为中继组配置默认节点
-        proxy_defaults = {}
-        if self.config.has_section("proxy_group_defaults"):
-            for group_name, default_node in self.config["proxy_group_defaults"].items():
-                if default_node:
-                    proxy_defaults[group_name] = default_node
+        proxy_defaults = self._get_proxy_defaults()
 
         # 创建中继组配置
         relay_group_config = {
@@ -561,28 +604,19 @@ class ClashConfigGenerator:
 
     def generate_main_proxy_groups(
         self,
-        nodes: List[Dict[str, Any]],
-        regions: Dict[str, Dict[str, Any]],
+        usable: List[Dict[str, Any]],
+        region_group_names: List[str],
         custom_groups: List[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """生成主要代理组"""
         if custom_groups is None:
             custom_groups = []
 
-        # 获取所有地区组名称
-        region_group_names = self._get_region_group_names(
-            nodes, regions
-        )
         # 全部可用节点名称（逐个单独加入每个主组）
-        all_node_names = [str(n["name"]) for n in self._usable_nodes(nodes)]
+        all_node_names = [str(n["name"]) for n in usable]
 
         # 获取代理组默认配置
-        proxy_defaults = {}
-        if self.config.has_section("proxy_group_defaults"):
-            for group_name, default_node in self.config["proxy_group_defaults"].items():
-                if default_node:
-                    proxy_defaults[group_name] = default_node
-                    logger.info(f"读取默认节点配置: {group_name} -> {default_node}")
+        proxy_defaults = self._get_proxy_defaults()
 
         # 获取主代理组的自定义地区配置
         custom_region_groups = {}
@@ -611,14 +645,16 @@ class ClashConfigGenerator:
             group_name = group_config["name"]
 
             # 构建 proxies 列表：默认节点（如果有） + 地区组 + 自定义组 + 中继组 + DIRECT
-            proxies = []
+            proxies: List[str] = []
+            seen: Set[str] = set()
             default_node = proxy_defaults.get(group_name, None)
 
             # 添加默认节点（如果配置了）
             if default_node:
                 proxies.append(default_node)
+                seen.add(default_node)
 
-            # 根据自定义配置或默认行为添加地区组
+            # 根据自定义配置或默认行为确定要加入的地区组
             if group_name in custom_region_groups:
                 region_list = custom_region_groups[group_name]
 
@@ -627,25 +663,22 @@ class ClashConfigGenerator:
                     logger.info(
                         f"主代理组 {group_name} 设置为手动模式，不自动添加任何地区节点"
                     )
+                    region_candidates = []
                 else:
                     # 使用自定义地区组（只添加实际存在的组，避免悬空引用）
-                    for region_name, region_config in regions.items():
-                        if (
-                            region_name not in region_list
-                            or region_name not in region_group_names
-                        ):
-                            continue
-                        full_region_name = region_name
-                        if (
-                            full_region_name != default_node
-                            and full_region_name not in proxies
-                        ):
-                            proxies.append(full_region_name)
+                    region_candidates = [
+                        region_name
+                        for region_name in region_group_names
+                        if region_name in region_list
+                    ]
             else:
                 # 默认行为：添加所有地区组（排除已作为默认节点的）
-                for region_name in region_group_names:
-                    if region_name != default_node and region_name not in proxies:
-                        proxies.append(region_name)
+                region_candidates = region_group_names
+
+            for region_name in region_candidates:
+                if region_name not in seen:
+                    proxies.append(region_name)
+                    seen.add(region_name)
 
             # 添加自定义组（根据目标组过滤，排除已作为默认节点的）
             for custom_group in custom_groups:
@@ -655,34 +688,31 @@ class ClashConfigGenerator:
                 # 如果目标组为空（表示添加到所有主代理组）或包含当前组
                 if (
                     not target_groups or group_name in target_groups
-                ) and custom_group_name != default_node:
-                    if custom_group_name not in proxies:
-                        proxies.append(custom_group_name)
+                ) and custom_group_name not in seen:
+                    proxies.append(custom_group_name)
+                    seen.add(custom_group_name)
 
-            # 检查当前主代理组是否将中继组作为默认节点
-            if (
-                relay_group_name
-                and default_node == relay_group_name
-                and relay_group_name not in proxies
-            ):
-                proxies.insert(0, relay_group_name)  # 插入到开头以确保是默认节点
-
-            # 添加中继组（如果配置了且不是默认节点，并且不在proxies中）
-            if (
-                relay_group_name
-                and relay_group_name != default_node
-                and relay_group_name not in proxies
-            ):
-                if self._should_include_relay_group(group_name):
+            # 中继组：作为默认节点时放开头，否则按投放配置追加
+            if relay_group_name:
+                if default_node == relay_group_name:
+                    if relay_group_name not in seen:
+                        proxies.insert(0, relay_group_name)
+                        seen.add(relay_group_name)
+                elif (
+                    relay_group_name not in seen
+                    and self._should_include_relay_group(group_name)
+                ):
                     proxies.append(relay_group_name)
+                    seen.add(relay_group_name)
 
             # 逐个追加全部可用节点（每个节点单独出现在该策略组中）
             for node_name in all_node_names:
-                if node_name != default_node and node_name not in proxies:
+                if node_name not in seen:
                     proxies.append(node_name)
+                    seen.add(node_name)
 
             # 最后添加 DIRECT
-            if "DIRECT" != default_node and "DIRECT" not in proxies:
+            if "DIRECT" not in seen:
                 proxies.append("DIRECT")
 
             group = {
@@ -724,20 +754,32 @@ class ClashConfigGenerator:
         return rules
 
     def _generate_all_proxy_groups(
-        self, nodes: List[Dict[str, Any]], regions: Dict[str, Dict[str, Any]]
+        self, usable: List[Dict[str, Any]], regions: Dict[str, Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """根据配置生成所有代理组"""
+        """根据配置生成所有代理组。
+
+        节点过滤与地区关键词匹配只执行一次，结果在各类型代理组间复用。
+        """
+        region_nodes, region_index = self._build_region_matches(usable, regions)
+        region_group_names = [
+            name for name, matched in region_nodes.items() if matched
+        ]
+
         # 先生成中继组，放在最前面
-        relay_groups = self.generate_relay_group(nodes, regions)
+        relay_groups = self.generate_relay_group(region_group_names)
 
         # 生成自定义组
-        custom_groups = self.generate_custom_groups(nodes, regions)
+        custom_groups = self.generate_custom_groups(
+            usable, region_nodes, region_index
+        )
 
         # 生成地区组（每个地区一个组）
-        region_groups = self.generate_region_groups(nodes, regions)
+        region_groups = self.generate_region_groups(region_nodes)
 
         # 生成主代理组（内部逐个列出全部节点）
-        main_groups = self.generate_main_proxy_groups(nodes, regions, custom_groups)
+        main_groups = self.generate_main_proxy_groups(
+            usable, region_group_names, custom_groups
+        )
 
         # 生成所有代理组 - 按顺序添加：中继组、主代理组、地区组、自定义组
         all_groups = []
@@ -768,6 +810,7 @@ class ClashConfigGenerator:
 
         # 直接拉取活动提供者的原始订阅并解析节点（失败则终止，保留旧配置）
         nodes = self._get_active_nodes()
+        usable = self._usable_nodes(nodes)
 
         # 生成配置
         config = {
@@ -779,8 +822,8 @@ class ClashConfigGenerator:
             "external-controller": self.config.get(
                 "clash", "external_controller", fallback=":9090"
             ),
-            "proxies": self._usable_nodes(nodes),
-            "proxy-groups": self._generate_all_proxy_groups(nodes, regions),
+            "proxies": usable,
+            "proxy-groups": self._generate_all_proxy_groups(usable, regions),
             "rule-providers": self.get_rule_providers(),
             "rules": self.get_custom_rules(),
         }
@@ -822,61 +865,21 @@ class ClashConfigGenerator:
                 errors.append(f"代理组 {gname} 使用了无效类型: {gtype or '(空)'}")
 
         for rule in config.get("rules", []):
-            fields = [part.strip() for part in str(rule).split(",")]
-            rule_type = fields[0]
-            if rule_type not in VALID_RULE_TYPES:
-                errors.append(f"未知规则类型: {rule}")
-                continue
-            if len(fields) < 2:
-                errors.append(f"规则格式不完整: {rule}")
-                continue
-            if rule_type == "MATCH":
-                target = fields[1]
-            else:
-                target = fields[2] if len(fields) >= 3 else None
-            if target is None:
-                errors.append(f"规则缺少目标代理组: {rule}")
-            elif target not in name_set and target not in BUILTIN_PROXIES:
-                errors.append(f"规则指向不存在的代理组 '{target}': {rule}")
+            error = check_rule(str(rule), name_set)
+            if error:
+                errors.append(error)
 
         return (not errors, errors)
 
     def save_config(
         self, config: Dict[str, Any], output_file: Optional[str] = None
     ) -> bool:
-        """保存配置：先备份旧文件，再原子写入，最后输出统计信息。"""
+        """保存配置：先写临时文件，再原子替换，最后输出统计信息。"""
         try:
-            start = time.monotonic()
             if output_file is None:
                 output_file = str(PROJECT_ROOT / "output" / "clash_profile.yaml")
             output_path = Path(output_file)
             output_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # 备份旧配置（失败不阻断生成，仅告警）
-            backup_dir = PROJECT_ROOT / "backups"
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            if output_path.exists():
-                stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                backup_file = backup_dir / f"clash_profile_{stamp}.yaml"
-                try:
-                    shutil.copy2(output_path, backup_file)
-                    logger.info(f"已备份旧配置: {backup_file.name}")
-                except OSError as e:
-                    logger.warning(f"备份旧配置失败: {e}")
-
-                # 清理超出保留数量的备份
-                backup_keep = self.config.getint("server", "backup_keep", fallback=10)
-                backups = sorted(
-                    backup_dir.glob("clash_profile_*.yaml"),
-                    key=lambda p: p.stat().st_mtime,
-                    reverse=True,
-                )
-                for old_backup in backups[backup_keep:]:
-                    try:
-                        old_backup.unlink()
-                        logger.info(f"清理旧备份: {old_backup.name}")
-                    except OSError as e:
-                        logger.warning(f"清理备份 {old_backup.name} 失败: {e}")
 
             # 原子写入：先写临时文件，再替换
             tmp_path = output_path.with_name(output_path.name + ".tmp")
@@ -909,7 +912,6 @@ class ClashConfigGenerator:
                 "regions": len(self.get_regions()),
                 "groups": len(config.get("proxy-groups", [])),
                 "rules": len(config.get("rules", [])),
-                "duration_ms": round((time.monotonic() - start) * 1000),
             }
             stats_path = PROJECT_ROOT / "output" / "stats.json"
             with open(stats_path, "w", encoding="utf-8") as f:
@@ -926,12 +928,26 @@ class ClashConfigGenerator:
         logger.info(" 开始生成 Clash 配置")
         logger.info("=" * 50)
 
+        # 若配置了 rules_url，先生成前拉取最新远程规则；失败则保留本地规则
+        local_rules = self.rules_config
+        used_remote = self.refresh_rules_from_remote()
+
         config = self.generate_config()
         if not config:
             logger.error(" 配置生成失败")
             return False
 
         ok, errors = self.validate_generated_config(config)
+        if not ok and used_remote:
+            # 远程规则未通过校验时回退到本地规则重试，避免一次异常推送中断更新
+            logger.warning(
+                " 远程规则配置未通过校验，回退到本地规则重新生成"
+            )
+            self.rules_config = local_rules
+            config = self.generate_config()
+            if config:
+                ok, errors = self.validate_generated_config(config)
+
         if not ok:
             logger.error(
                 f" 配置未通过校验（{len(errors)} 个问题），保留现有配置文件"

@@ -96,7 +96,7 @@ rule-providers:
 
   Microsoft:
     type: http
-    behavior: classical
+    behavior: domain
     url: "https://raw.githubusercontent.com/yanglinbin/clash-config-manager/refs/heads/main/clash/Microsoft.txt"
     path: ./ruleset/Microsoft.yaml
     interval: 86400
@@ -187,6 +187,8 @@ custom_rules:
   - IP-CIDR,208.64.203.0/23,全球直连
   - IP-CIDR,208.78.164.0/22,全球直连
 
+  - DOMAIN-KEYWORD,1drv,全球直连
+  - DOMAIN-KEYWORD,microsoft,全球直连
   # F1TV规则
   - DOMAIN-SUFFIX,formula1.com,F1TV
   - DOMAIN-SUFFIX,livetiming-proxy.multiviewer.dev,F1TV

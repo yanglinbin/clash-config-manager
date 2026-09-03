@@ -35,18 +35,17 @@ active_provider = XXAI
 exclude_keywords = 网址,剩余,流量,重置,套餐,如遇,永久,官方,群组,欢迎,官网,频道,个人,到期,续费
 
 [server]
-# 自动更新间隔（秒）：Web 应用启动后按此间隔重新生成配置
-# 同时作为 proxy-providers 的订阅刷新间隔；设为 0 或负值则关闭自动更新
-# （此时订阅刷新间隔回退为 3600）
-# 环境变量 UPDATE_INTERVAL 可覆盖此值
+# 自动更新间隔（秒）：默认每小时（3600 秒）重新生成一次配置
+# 设为 0 或负值可关闭自动更新；环境变量 UPDATE_INTERVAL 可覆盖此值
 update_interval = 3600
-
-# 备份保留数量：覆盖输出配置前自动备份到 backups/，超出部分清理
-backup_keep = 10
 
 [files]
 # 规则配置文件路径
 rules_config = config/rules.yaml
+
+# 可选：远程规则地址。配置后每次生成前会先拉取最新 rules.yaml；
+# 拉取失败自动回退本地 rules_config，环境变量 RULES_URL 可覆盖此值。
+# rules_url = https://raw.githubusercontent.com/yanglinbin/Clash-Config-Manager/refs/heads/main/config/rules.yaml
 
 [clash]
 # 生成 Clash 配置的基础参数
@@ -138,4 +137,4 @@ Google = 香港
 # APP_PORT        - Web 服务监听端口（默认 5000）
 # LOG_LEVEL       - 日志级别: DEBUG/INFO/WARNING/ERROR（默认 INFO）
 # UPDATE_TOKEN    - /update-config 接口的 Bearer 令牌（可选）
-# WEBHOOK_SECRET  - GitHub Webhook HMAC 密钥；同时作为 /update-config 令牌
+# RULES_URL       - 覆盖 [files] rules_url（远程 rules.yaml 地址，可选）

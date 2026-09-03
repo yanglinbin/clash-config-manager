@@ -8,59 +8,53 @@
 </head>
 <body>
     <div class="container">
-        <h1> Clash Config Manager</h1>
+        <header class="page-header">
+            <h1>Clash Config Manager</h1>
+            <span class="badge live"><span class="dot" aria-hidden="true"></span>运行中</span>
+        </header>
 
-        <div class="status info">
-            <h3> 服务状态</h3>
-            <p> 服务正在运行</p>
-            <p> 当前时间: {{ current_time }}</p>
-            <p> 最后更新: {{ last_update }}</p>
+        <div class="status">
+            <h3>服务状态</h3>
+            <p class="service-line">服务正在运行</p>
+            <p>当前时间: <span id="current-time">{{ current_time }}</span></p>
+            <p>最后更新: <span id="last-update">{{ last_update }}</span></p>
         </div>
 
         <div class="status">
-            <h3> 配置信息</h3>
-            <p>配置文件: {{ config_exists }}</p>
-            {% if stats %}
-            <p>提供者: {{ stats.providers }} 个</p>
-            <p>代理组: {{ stats.groups }} 个</p>
-            <p>规则: {{ stats.rules }} 条</p>
-            <p>最近生成: {{ stats.generated_at }}（耗时 {{ stats.duration_ms }} ms）</p>
-            {% else %}
-            <p>尚未生成统计信息</p>
-            {% endif %}
+            <h3>配置信息</h3>
+            <p>配置文件: <span id="config-file">{{ config_exists }}</span></p>
+            <p>文件大小: <span id="config-size">—</span></p>
+            <p>提供者: <span id="stat-providers">{{ stats.providers if stats else '—' }}</span> 个</p>
+            <p>节点: <span id="stat-nodes">{{ stats.nodes if stats else '—' }}</span> 个</p>
+            <p>代理组: <span id="stat-groups">{{ stats.groups if stats else '—' }}</span> 个</p>
+            <p>规则: <span id="stat-rules">{{ stats.rules if stats else '—' }}</span> 条</p>
+            <p>最近生成: <span id="stat-generated">{{ stats.generated_at if stats else '—' }}</span></p>
         </div>
 
         <div class="status">
-            <h3> 自动更新</h3>
-            <p>更新间隔: {{ update_interval_text }}</p>
-            {% if next_update %}
-            <p>下次更新: {{ next_update }}</p>
-            {% endif %}
-        </div>
-
-        <div class="status api-list">
-            <h3> API 接口</h3>
-            <ul>
-                <li><code>GET /status</code> - 获取服务状态（JSON格式）</li>
-                <li><code>POST /update-config</code> - 触发配置更新（可配置令牌鉴权）</li>
-                <li><code>GET /clash_profile.yaml</code> - 获取生成的配置文件</li>
-                <li><code>POST /webhook/github</code> - GitHub Webhook（HMAC 校验）</li>
-            </ul>
+            <h3>自动更新</h3>
+            <p>更新间隔: <span id="update-interval">{{ update_interval_text }}</span></p>
+            <p>下次更新: <span id="next-update">{{ next_update or '未启用' }}</span></p>
         </div>
 
         <div class="status">
-            <h3> 操作</h3>
+            <h3>操作</h3>
             {% if need_token %}
             <div class="token-row">
-                <label for="token-input">更新令牌:</label>
-                <input type="password" id="token-input" placeholder="输入更新令牌（仅保存在本地浏览器）">
+                <label for="token-input">更新令牌</label>
+                <input type="password" id="token-input" autocomplete="off"
+                       placeholder="输入更新令牌（仅保存在本机浏览器）">
             </div>
             {% endif %}
-            <button id="update-btn" onclick="updateConfig()"> 更新配置</button>
-            <button onclick="checkStatus()"> 检查状态</button>
+            <div class="btn-row">
+                <button type="button" class="btn btn-primary" id="update-btn">更新配置</button>
+                <button type="button" class="btn btn-secondary" id="refresh-btn">刷新状态</button>
+                <a class="btn btn-secondary" href="/clash_profile.yaml">下载配置</a>
+            </div>
+            <p class="refresh-hint" id="refresh-hint" hidden></p>
         </div>
 
-        <div id="result"></div>
+        <div id="result" role="status" aria-live="polite"></div>
     </div>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>

@@ -53,7 +53,9 @@ COPY --chown=appuser:appuser src/ ./src/
 
 # 创建必要的目录并设置权限
 # 注意：config.ini 和 rules.yaml 由用户通过 docker-compose.yml 卷挂载提供
-RUN mkdir -p logs output backups config && \
+# rules.yaml 支持通过 [files] rules_url / RULES_URL 从远程（GitHub）拉取，
+# 拉取或校验失败时自动回退本地规则，无需把规则写回只读的 config/ 目录。
+RUN mkdir -p logs output config && \
     chown -R appuser:appuser ${APP_HOME}
 
 # 切换到非root用户

@@ -2,11 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 Clash Config Manager Web 应用
-提供配置状态查询、配置更新、自动更新调度和 GitHub Webhook 接口
+提供配置状态查询、手动更新触发与自动更新调度接口
 """
 
 import functools
-import hashlib
 import hmac
 import json
 import logging
@@ -55,8 +54,20 @@ app = Flask(
 
 
 def get_update_token() -> str:
-    """获取更新令牌（UPDATE_TOKEN 优先，WEBHOOK_SECRET 作为备用来源）。"""
-    return os.environ.get("UPDATE_TOKEN") or os.environ.get("WEBHOOK_SECRET") or ""
+    """获取更新令牌（UPDATE_TOKEN 环境变量）。"""
+    return os.environ.get("UPDATE_TOKEN", "")
+
+
+def _humanize_interval(interval: int) -> str:
+    """把更新间隔（秒）格式化为人类可读文案。"""
+    if interval <= 0:
+        return "未启用"
+    if interval % 3600 == 0:
+        hours = interval // 3600
+        return "每小时" if hours == 1 else f"每 {hours} 小时"
+    if interval % 60 == 0:
+        return f"每 {interval // 60} 分钟"
+    return f"每 {interval} 秒"
 
 
 def require_update_token(route_func):
@@ -137,7 +148,8 @@ class ConfigManager:
             except ValueError:
                 logger.warning(f"环境变量 UPDATE_INTERVAL 无效: {env_value!r}")
         try:
-            return self.config.getint("server", "update_interval", fallback=0)
+            # 默认每小时（3600 秒）更新一次
+            return self.config.getint("server", "update_interval", fallback=3600)
         except ValueError:
             logger.warning("config.ini 中 update_interval 无效，自动更新已禁用")
             return 0
@@ -309,37 +321,6 @@ def update_config():
         return jsonify({"error": "Internal server error"}), 500
 
 
-@app.route("/webhook/github", methods=["POST"])
-def github_webhook():
-    """GitHub Webhook 入口：校验 HMAC 签名后触发配置更新。"""
-    secret = os.environ.get("WEBHOOK_SECRET", "")
-    if not secret:
-        return jsonify({"error": "Webhook 未配置（WEBHOOK_SECRET 为空）"}), 503
-
-    signature = request.headers.get("X-Hub-Signature-256", "")
-    payload = request.get_data()
-    expected = "sha256=" + hmac.new(
-        secret.encode("utf-8"), payload, hashlib.sha256
-    ).hexdigest()
-    if not signature or not hmac.compare_digest(signature, expected):
-        logger.warning("Webhook 签名校验失败")
-        return jsonify({"error": "Invalid signature"}), 401
-
-    event = request.headers.get("X-GitHub-Event", "")
-    if event == "ping":
-        logger.info("收到 GitHub Webhook ping")
-        return jsonify({"status": "pong"}), 200
-
-    thread = threading.Thread(
-        target=config_manager.regenerate_config,
-        daemon=True,
-        name="webhook-update",
-    )
-    thread.start()
-    logger.info("收到 GitHub Webhook，已触发配置更新")
-    return jsonify({"status": "accepted", "message": "Update triggered"}), 202
-
-
 @app.route("/clash_profile.yaml")
 def get_clash_config():
     """获取生成的Clash配置文件"""
@@ -364,15 +345,14 @@ def index():
         if config_manager.last_update
         else "从未更新"
     )
+    update_interval_text = _humanize_interval(interval)
     if interval > 0:
         base = config_manager.last_update or datetime.now()
         next_update = (base + timedelta(seconds=interval)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        update_interval_text = f"每 {interval} 秒"
     else:
         next_update = None
-        update_interval_text = "未启用"
 
     return render_template(
         "index.html",
@@ -380,7 +360,7 @@ def index():
         last_update=last_update,
         next_update=next_update,
         update_interval_text=update_interval_text,
-        config_exists=" 存在" if OUTPUT_FILE.exists() else " 不存在",
+        config_exists="存在" if OUTPUT_FILE.exists() else "不存在",
         stats=stats,
         need_token=bool(get_update_token()),
     )

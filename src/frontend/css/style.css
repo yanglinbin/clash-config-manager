@@ -1,132 +1,281 @@
 /* Clash Config Manager - 样式表 */
 
+:root {
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #64748b;
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --success-bg: #dcfce7;
+    --success-text: #166534;
+    --success-border: #22c55e;
+    --info-bg: #e0f2fe;
+    --info-text: #075985;
+    --info-border: #0ea5e9;
+    --error-bg: #fee2e2;
+    --error-text: #991b1b;
+    --error-border: #ef4444;
+    --radius: 12px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    font-family: Arial, sans-serif;
-    margin: 40px;
-    background: #f5f5f5;
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    line-height: 1.6;
 }
 
 .container {
-    max-width: 800px;
+    max-width: 860px;
     margin: 0 auto;
-    background: white;
-    padding: 30px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 28px 16px 56px;
+}
+
+/* 页头 */
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 20px;
 }
 
 h1 {
-    color: #333;
-    border-bottom: 3px solid #007bff;
-    padding-bottom: 10px;
+    margin: 0;
+    font-size: 24px;
 }
 
-h3 {
-    margin-top: 0;
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--success-bg);
+    color: var(--success-text);
 }
 
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success-border);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+/* 信息卡片（.status 同时作为操作结果容器的基底） */
 .status {
-    padding: 20px;
-    background: #f0f0f0;
-    border-radius: 5px;
-    margin: 20px 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    margin: 14px 0;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.status h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
 }
 
 .status p {
-    margin: 8px 0;
+    margin: 6px 0;
 }
 
-.success {
-    background: #d4edda;
-    color: #155724;
-    border-left: 4px solid #28a745;
+.service-line {
+    margin: -4px 0 10px;
+    color: var(--muted);
+    font-size: 13px;
 }
 
-.info {
-    background: #d1ecf1;
-    color: #0c5460;
-    border-left: 4px solid #17a2b8;
+.status.success,
+.status.info,
+.status.error {
+    border-left-width: 4px;
 }
 
-.error {
-    background: #f8d7da;
-    color: #721c24;
-    border-left: 4px solid #dc3545;
+.status.info {
+    background: var(--info-bg);
+    border-left-color: var(--info-border);
+    color: var(--info-text);
 }
 
-button {
-    padding: 12px 24px;
-    background: #007bff;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    margin-right: 10px;
+.status.success {
+    background: var(--success-bg);
+    border-left-color: var(--success-border);
+    color: var(--success-text);
 }
 
-button:hover {
-    background: #0056b3;
+.status.error {
+    background: var(--error-bg);
+    border-left-color: var(--error-border);
+    color: var(--error-text);
 }
 
-button:active {
-    transform: translateY(1px);
-}
-
-button:disabled {
-    background: #6c757d;
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-.token-row {
-    margin-bottom: 12px;
-}
-
-.token-row label {
-    margin-right: 8px;
-    font-weight: bold;
-}
-
-.token-row input {
-    padding: 8px 10px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    width: 260px;
-    font-size: 14px;
-}
-
-.api-list {
-    background: #f8f9fa;
-    padding: 15px;
-    border-radius: 5px;
-}
-
-.api-list ul {
-    margin: 0;
-    padding-left: 20px;
-}
-
-.api-list li {
-    margin: 8px 0;
-}
-
-code {
-    background: #e9ecef;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-family: 'Courier New', monospace;
+.status.success h3,
+.status.info h3,
+.status.error h3 {
+    margin-top: 0;
 }
 
 #result {
     display: none;
+    margin-top: 0;
+}
+
+#result:not([hidden]) {
+    display: block;
 }
 
 #result pre {
-    background: #f8f9fa;
-    padding: 15px;
-    border-radius: 5px;
+    margin: 10px 0 0;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
     overflow-x: auto;
-    max-height: 400px;
+    max-height: 320px;
+}
+
+/* 按钮 */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.4;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--primary-dark);
+}
+
+.btn-secondary {
+    background: var(--card);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: #f8fafc;
+}
+
+.btn.is-busy::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.btn-secondary.is-busy::before {
+    border-color: rgba(37, 99, 235, 0.25);
+    border-top-color: var(--primary);
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+/* 令牌输入 */
+.token-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.token-row label {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.token-row input {
+    flex: 1 1 260px;
+    max-width: 360px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--text);
+    font-size: 14px;
+}
+
+.token-row input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+/* 提示 */
+.refresh-hint {
+    margin: 12px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+[hidden] {
+    display: none !important;
+}
+
+@media (max-width: 560px) {
+    .container {
+        padding-top: 18px;
+    }
+
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .status {
+        padding: 16px;
+    }
 }
 

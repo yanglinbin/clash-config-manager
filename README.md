@@ -12,8 +12,6 @@
 -  **节点关键词过滤** - 自动过滤广告节点和无效节点
 -  **自定义规则配置** - 灵活配置代理规则和分流规则
 -  **生成前校验** - 校验组名唯一、节点/组引用完整、规则格式正确，失败时不覆盖旧配置
--  **自动备份** - 每次更新前备份旧配置到 `backups/`，保留最近 N 份
--  **GitHub Webhook** - 内置 HMAC 校验的 Webhook 端点，推送即更新
 -  **Docker 部署** - 容器化部署，简单可靠
 -  **Web 管理界面** - 提供状态查询和配置更新功能
 
@@ -88,7 +86,6 @@ clash-config-manager/
 │       └── js/                    # JavaScript 脚本
 ├── output/                 # 生成的配置（自动创建）
 ├── logs/                   # 日志文件（自动创建）
-├── backups/                # 备份目录（可选）
 ├── Dockerfile              # Docker 镜像定义
 ├── docker-compose.yml      # Docker 编排配置
 ├── requirements.txt        # Python 依赖
@@ -143,7 +140,6 @@ update_interval = 3600
 | `/` | GET | Web 管理界面 |
 | `/status` | GET | 服务状态（JSON） |
 | `/update-config` | POST | 触发配置更新（可选 Bearer 令牌鉴权） |
-| `/webhook/github` | POST | GitHub Webhook（HMAC 校验，需配置 `WEBHOOK_SECRET`） |
 | `/clash_profile.yaml` | GET | 获取生成的 Clash 配置 |
 
 ### 自动更新
@@ -152,15 +148,14 @@ Web 应用启动后按 `config.ini` 中 `[server] update_interval`（秒）定�
 也可通过环境变量 `UPDATE_INTERVAL` 覆盖。设为 `0` 或负值可关闭自动更新。
 启动时若输出配置尚不存在，会立即在后台生成一次。
 
-### 更新令牌与 Webhook
+若在 `[files]` 中配置了 `rules_url`（或用环境变量 `RULES_URL` 覆盖），每次生成前会
+先从该地址拉取最新 `rules.yaml`（默认指向本仓库 GitHub 的 `config/rules.yaml`）；
+拉取失败或远程内容未通过校验时，自动回退到本地 `rules_config` 重新生成，避免更新中断。
 
-通过环境变量配置（`docker-compose.yml` 或启动环境）：
+### 更新令牌
 
-- `UPDATE_TOKEN` - 设置后 `/update-config` 需要携带 `Authorization: Bearer <token>`
-- `WEBHOOK_SECRET` - 同时作为 `/update-config` 的令牌和 GitHub Webhook 的 HMAC 密钥
-
-GitHub Webhook 配置：Payload URL 指向 `https://your-domain.com/webhook/github`，
-Content type 选 `application/json`，Secret 填 `WEBHOOK_SECRET` 的值。
+通过环境变量 `UPDATE_TOKEN` 配置（`docker-compose.yml` 或启动环境）：
+设置后 `/update-config` 需要携带 `Authorization: Bearer <token>`。
 
 ### 单一供应商模式
 
@@ -191,10 +186,9 @@ active_provider = XXAI
 组内显式列出名称匹配该地区关键词的节点；没有匹配节点的地区不会生成组。
 地区组类型由 `[merged_regions]` 配置（`default_type` 和各地区覆盖）。
 
-### 配置校验与备份
+### 配置校验
 
 - 生成前自动校验：代理组名称唯一、引用完整、类型合法、规则格式正确，校验失败不会覆盖旧配置
-- 每次覆盖前自动备份到 `backups/`，保留数量由 `[server] backup_keep` 控制（默认 10）
 - 规则文件检查工具：`python scripts/lint_rules.py`（重复规则、重叠 CIDR、无效引用等）
 
 ---

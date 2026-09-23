@@ -2,21 +2,19 @@
 
 把你自己申请的 SSL 证书放在这里（该目录内容不会提交到 Git）。
 
-需要两个文件：
+需要两个文件（文件名与 `nginx/default.conf` 中的路径一致）：
 
 | 文件 | 说明 |
 |------|------|
-| `fullchain.pem` | 证书（**含中间证书链**；阿里云下载的 `.pem` 通常就是这个） |
-| `privkey.pem`   | 私钥（阿里云下载的 `.key`） |
-
-示例：
+| `cert.crt` | 证书（**建议含中间证书链**；多数服务商下载的 `.crt` / `.pem` 已包含） |
+| `cert.key` | 私钥 |
 
 ```bash
-# 从阿里云下载的文件通常类似
-#   1234567_clash.yilabao.top.pem
-#   1234567_clash.yilabao.top.key
-cp 1234567_clash.yilabao.top.pem nginx/certs/fullchain.pem
-cp 1234567_clash.yilabao.top.key nginx/certs/privkey.pem
+# 例如从服务商下载的文件名是 cert.crt / cert.key，直接放进来即可
+cp cert.crt cert.key nginx/certs/
+
+# 确认文件到位（宿主机侧）
+ls -l nginx/certs/
 
 # 让 nginx 重新读取
 docker compose up -d --force-recreate nginx
@@ -25,4 +23,4 @@ docker compose up -d --force-recreate nginx
 > 文件名可以不同 —— 只要同步修改 `nginx/default.conf` 里的
 > `ssl_certificate` / `ssl_certificate_key` 路径即可。
 >
-> ⚠️ `privkey.pem` 是私钥，**不要提交到仓库**（已在 `.gitignore` 中忽略）。
+> ⚠️ `cert.key` 是私钥，**不要提交到仓库**（本目录内容已在 `.gitignore` 中忽略）。

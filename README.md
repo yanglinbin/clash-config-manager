@@ -37,9 +37,8 @@ docker compose up -d --build
 # 3. 验证
 curl -s http://localhost/status
 
-# 4. 启用 HTTPS：把证书放到 nginx/certs/ 后重建 nginx
-cp 你的证书.pem nginx/certs/fullchain.pem
-cp 你的私钥.key nginx/certs/privkey.pem
+# 4. 启用 HTTPS：把证书放到 nginx/certs/ 后重建 nginx（文件名需与 nginx/default.conf 一致）
+cp cert.crt cert.key nginx/certs/
 docker compose up -d --force-recreate nginx
 ```
 

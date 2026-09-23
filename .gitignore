@@ -94,3 +94,7 @@ dist/
 coverage/
 public/js/
 *.tsbuildinfo
+
+# ===== TLS 证书与 ACME 校验目录（勿提交私钥） =====
+nginx/letsencrypt/
+nginx/webroot/

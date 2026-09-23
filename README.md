@@ -36,6 +36,9 @@ docker compose up -d --build
 
 # 3. 验证
 curl -s http://localhost/status
+
+# 4.（可选）启用 HTTPS：签发证书并切换（需域名解析已指向本机）
+bash scripts/setup-ssl.sh clash.example.com me@example.com
 ```
 
 访问：
@@ -87,7 +90,14 @@ clash-config-manager/
 ├── output/                 # 生成结果（自动创建）
 ├── logs/                   # 日志文件（自动创建）
 ├── dist/                   # 服务端构建产物（自动生成，已忽略）
-├── nginx/default.conf      # Nginx 反向代理站点配置（绑定挂载进容器）
+├── nginx/
+│   ├── default.conf        #   Nginx 站点配置（HTTP，绑定挂载进容器）
+│   ├── default.https.conf  #   HTTPS 模板（由 scripts/setup-ssl.sh 生成 default.conf）
+│   ├── letsencrypt/        #   Let's Encrypt 证书（运行时生成，已忽略）
+│   └── webroot/            #   ACME 校验目录（运行时生成，已忽略）
+├── scripts/
+│   ├── setup-ssl.sh        #   一键签发证书并切换到 HTTPS
+│   └── renew-ssl.sh        #   证书续期并 reload nginx
 ├── .github/workflows/ci.yml  # CI（类型检查 / 测试 / 构建 / 镜像）
 ├── .env.example            # 环境变量示例
 ├── Dockerfile              # Docker 镜像定义（多阶段）

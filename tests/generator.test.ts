@@ -10,10 +10,12 @@ import { createLogger } from "../src/utils/log.js";
 
 const ROOT = process.cwd();
 const FIXTURE = path.join(ROOT, "tests", "fixtures", "clash_profile.python.yaml");
+// 测试专用配置（无密钥）；订阅链接模式不会去拉取订阅
+const CONFIG_FIXTURE = path.join(ROOT, "tests", "fixtures", "config.ini");
 
-describe("generator (provider 模式)", () => {
-  it("生成的配置与 Python 参考实现语义一致", async () => {
-    const generator = new ClashConfigGenerator(undefined, createLogger("test.log"));
+describe("generator (订阅链接模式)", () => {
+  it("生成的配置与参考实现（黄金文件）语义一致", async () => {
+    const generator = new ClashConfigGenerator(CONFIG_FIXTURE, createLogger("test.log"));
     const config = await generator.generateConfig();
 
     expect(config).not.toBeNull();
@@ -26,7 +28,7 @@ describe("generator (provider 模式)", () => {
   });
 
   it("校验能发现悬空引用", async () => {
-    const generator = new ClashConfigGenerator(undefined, createLogger("test.log"));
+    const generator = new ClashConfigGenerator(CONFIG_FIXTURE, createLogger("test.log"));
     const config = await generator.generateConfig();
     config!["proxy-groups"]![0]!.proxies = ["不存在的组"];
     const { ok, errors } = generator.validateGeneratedConfig(config!);

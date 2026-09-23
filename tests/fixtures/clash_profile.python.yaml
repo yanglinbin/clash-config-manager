@@ -169,7 +169,7 @@ rules:
 proxy-providers:
   IKUUU:
     type: http
-    url: https://1eylr.no-mad-sub.one/link/5ezNG12QwzASMJLN?clash=3&extend=1
+    url: https://example.com/subscription
     interval: 3600
     path: ./providers/IKUUU.yaml
     health-check:

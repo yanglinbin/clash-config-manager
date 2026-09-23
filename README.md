@@ -53,7 +53,7 @@ docker compose up -d --force-recreate nginx
 > 证书放置与文件名详见 [nginx/certs/README.md](nginx/certs/README.md)。
 
 **前置要求**：Docker 20.10+ 与 Docker Compose v2。
-首次构建需要能访问 npm registry 与 Docker Hub（拉取 `node:20-alpine`、`nginx:alpine`）。
+首次构建需要能访问 npm registry 与 Docker Hub（拉取 `node:20-alpine`、`nginx:1.30-alpine`）。
 
 若需要与其他容器互联（如外部 Nginx），可选地创建共享网络：
 

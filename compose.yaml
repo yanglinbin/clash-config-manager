@@ -35,7 +35,8 @@ services:
       - ./logs:/app/logs
 
   nginx:
-    image: nginx:alpine
+    # 固定版本，避免拉到旧缓存镜像（旧版不支持 http2 指令）
+    image: nginx:1.30-alpine
     container_name: clash-nginx
     restart: unless-stopped
     depends_on:

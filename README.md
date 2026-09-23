@@ -1,7 +1,7 @@
 # Clash 配置管理器
 
 自动化的 Clash / Mihomo 配置管理服务：读取 `config.ini`（订阅源、地区、过滤、代理组）与
-`rules.yaml`（分流规则），生成可用配置并通过 Web 界面 / 接口对外提供，支持定时与 Webhook 触发更新。
+`rules.yaml`（分流规则），生成可用配置并通过 Web 界面 / 接口对外提供，支持手动与 GitHub Webhook 触发更新。
 
 > **技术栈**：Node.js 20 + TypeScript + Fastify，前端同为 TypeScript。
 > **部署**：Docker Compose（应用容器 + Nginx 反代），也支持裸机运行。
@@ -16,7 +16,7 @@
 - **节点关键词过滤** — 通过策略组 `filter` 负向前瞻排除广告 / 信息节点
 - **自定义组 / 中继组** — 按用途组合地区，可选中继组
 - **生成前校验** — 组名唯一、引用完整、类型合法、规则格式正确；失败时不覆盖旧配置
-- **自动更新** — 按 `[server] update_interval` 定时重新生成
+- **手动 / Webhook 触发** — 页面与接口手动触发，或 GitHub push 即时触发（不再有定时自动更新）
 - **GitHub Webhook** — push 变更 `rules.yaml` 后即时触发重新生成（HMAC-SHA256 校验）
 - **Web 管理界面 + HTTP 接口**
 
@@ -65,7 +65,7 @@ clash-config-manager/
 ├── src/                    # 后端源代码（TypeScript）
 │   ├── index.ts                   # 服务入口（Fastify 启动）
 │   ├── server/app.ts              # Fastify 应用与路由
-│   ├── services/configManager.ts  # 状态 / 调度 / 生成触发
+│   ├── services/configManager.ts  # 状态 / 生成触发 / 互斥锁
 │   ├── clash/                     # 生成器核心
 │   │   ├── generator.ts           #   配置生成器
 │   │   ├── config.ts              #   config.ini + rules.yaml 解析
@@ -133,9 +133,6 @@ active_provider = MY_PROVIDER        # 必填：唯一启用的订阅源（大�
 [filter]
 # 全局排除：命中任一关键词的节点不会出现在任何组
 exclude_keywords = 剩余,官网,到期
-
-[server]
-update_interval = 3600               # 自动更新间隔（秒），0 或负值关闭
 
 [files]
 rules_config = config/rules.yaml     # 规则文件（本地文件）
@@ -205,10 +202,15 @@ default_type = url-test              # 地区组类型
 
 ---
 
-## 自动更新
+## 触发更新
 
-Web 应用启动后按 `config.ini` 的 `[server] update_interval`（秒）定时重新生成配置，
-设为 `0` 或负值可关闭。启动时若输出配置尚不存在，会立即在后台生成一次。
+配置只在以下时机重新生成（**无定时自动更新**）：
+
+1. 页面「更新配置」按钮，或 `POST /update-config`
+2. GitHub Webhook（push 变更 `config/rules.yaml` 时）
+3. 服务启动时若输出配置尚不存在，自动生成一次
+
+规则来自本地 `config/rules.yaml`（`[files] rules_config`）。
 
 ### 推送后即时更新（GitHub Webhook）
 

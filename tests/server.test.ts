@@ -9,7 +9,6 @@ const SECRET = "testsecret";
 
 function stubManager(): ConfigManager {
   return {
-    getUpdateInterval: () => 3600,
     lastUpdate: null,
     readStats: () => null,
     regenerateConfig: vi.fn(async () => true),
@@ -87,8 +86,8 @@ describe("webhook / 路由", () => {
     expect(res.statusCode).toBe(200);
     const data = res.json();
     expect(data.server).toBe("Clash Config Manager");
-    expect(data).toHaveProperty("update_interval");
-    expect(data).toHaveProperty("next_update");
+    expect(data).toHaveProperty("config_file_exists");
+    expect(data).toHaveProperty("webhook_enabled");
     await app.close();
   });
 });

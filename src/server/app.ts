@@ -80,22 +80,13 @@ export function buildApp(configManager: ConfigManager): FastifyInstance {
   });
 
   app.get("/status", () => {
-    const interval = configManager.getUpdateInterval();
     const info: Record<string, unknown> = {
       server: "Clash Config Manager",
       status: "running",
       timestamp: isoSeconds(),
       last_update: configManager.lastUpdate ? isoSeconds(configManager.lastUpdate) : null,
       config_file: "output/clash_profile.yaml",
-      update_interval: interval,
     };
-
-    if (interval > 0) {
-      const base = configManager.lastUpdate ?? new Date();
-      info.next_update = isoSeconds(new Date(base.getTime() + interval * 1000));
-    } else {
-      info.next_update = null;
-    }
 
     const exists = fs.existsSync(OUTPUT_FILE);
     info.config_file_exists = exists;
@@ -107,6 +98,8 @@ export function buildApp(configManager: ConfigManager): FastifyInstance {
 
     const stats = configManager.readStats();
     if (stats) info.stats = stats;
+
+    info.webhook_enabled = webhookSecret().length > 0;
 
     return info;
   });

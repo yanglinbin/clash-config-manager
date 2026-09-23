@@ -11,8 +11,9 @@ import { PUBLIC_DIR } from "./utils/paths.js";
 const log = createLogger("app.log");
 
 const configManager = new ConfigManager(undefined, log);
-// 自动更新调度在服务启动时开启（幂等）
-configManager.startScheduler();
+
+// 首次启动且输出配置不存在时，后台生成一次
+configManager.ensureInitialConfig();
 
 const app = buildApp(configManager);
 
@@ -32,7 +33,6 @@ app
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
-    configManager.stopScheduler();
     void app.close().finally(() => process.exit(0));
   });
 }

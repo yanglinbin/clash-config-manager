@@ -10,10 +10,9 @@ interface StatusStats {
 interface StatusPayload {
   timestamp?: string;
   last_update?: string | null;
-  update_interval?: number;
-  next_update?: string | null;
   config_file_exists?: boolean;
   config_file_size?: number | null;
+  webhook_enabled?: boolean;
   stats?: StatusStats;
 }
 
@@ -70,16 +69,6 @@ function formatSize(bytes?: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function formatInterval(seconds?: number): string {
-  if (typeof seconds !== "number" || seconds <= 0) return "未启用";
-  if (seconds % 3600 === 0) {
-    const hours = seconds / 3600;
-    return hours === 1 ? "每小时" : `每 ${hours} 小时`;
-  }
-  if (seconds % 60 === 0) return `每 ${seconds / 60} 分钟`;
-  return `每 ${seconds} 秒`;
-}
-
 function numOrDash(value?: number): string {
   return typeof value === "number" ? String(value) : "—";
 }
@@ -87,8 +76,7 @@ function numOrDash(value?: number): string {
 function applyStatus(data: StatusPayload): void {
   setText("current-time", formatTime(data.timestamp));
   setText("last-update", formatTime(data.last_update));
-  setText("update-interval", formatInterval(data.update_interval));
-  setText("next-update", data.next_update ? formatTime(data.next_update) : "未启用");
+  setText("webhook-status", data.webhook_enabled ? "已启用" : "未启用");
 
   setText("config-file", data.config_file_exists ? "存在" : "不存在");
   setText(

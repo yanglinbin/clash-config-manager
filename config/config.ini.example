@@ -36,11 +36,6 @@ active_provider = XXAI
 # 留空 = 不排除任何节点。
 exclude_keywords = 网址,剩余,流量,重置,套餐,如遇,永久,官方,群组,欢迎,官网,频道,个人,到期,续费
 
-[server]
-# 自动更新间隔（秒）：默认每小时（3600 秒）重新生成一次配置
-# 设为 0 或负值可关闭自动更新
-update_interval = 3600
-
 [files]
 # 规则配置文件路径（规则只来自本地文件）
 rules_config = config/rules.yaml

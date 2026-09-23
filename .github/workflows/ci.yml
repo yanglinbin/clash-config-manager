@@ -21,6 +21,10 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
+      # 构建必须早于 lint:rules / generate：它们运行的是 dist/ 下的编译产物
+      - name: 构建
+        run: npm run build
+
       - name: 类型检查
         run: npm run typecheck
 
@@ -29,9 +33,6 @@ jobs:
 
       - name: 单元测试
         run: npm test
-
-      - name: 构建
-        run: npm run build
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4

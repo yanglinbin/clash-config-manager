@@ -87,3 +87,10 @@ docker-volumes/
 
 # ===== 文档 =====
 docs/
+
+# ===== Node / TypeScript =====
+node_modules/
+dist/
+coverage/
+public/js/
+*.tsbuildinfo

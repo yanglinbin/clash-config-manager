@@ -1,88 +1,40 @@
-# Clash 配置管理器 - Docker 镜像
-# 多阶段构建，优化镜像大小
+# Clash 配置管理器镜像（Node.js + TypeScript，多阶段构建）
 
-# ==================== 构建阶段 ====================
-FROM python:3.12-slim AS builder
+# ---------- 构建阶段：安装依赖并编译 TS ----------
+FROM node:20-alpine AS build
+WORKDIR /app
 
-# 设置工作目录
-WORKDIR /build
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# 复制依赖文件
-COPY requirements.txt .
+COPY tsconfig.json tsconfig.web.json tsup.config.ts ./
+COPY src ./src
+COPY public ./public
+RUN npm run build
 
-# 使用阿里云镜像源加速 pip 下载（国内服务器加速）
-RUN pip install --no-cache-dir --user \
-    -i https://mirrors.aliyun.com/pypi/simple/ \
-    --trusted-host mirrors.aliyun.com \
-    -r requirements.txt
+# ---------- 运行阶段：仅保留产物与生产依赖 ----------
+FROM node:20-alpine
 
-# ==================== 运行阶段 ====================
-FROM python:3.12-slim
-
-# 设置环境变量
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
+ENV NODE_ENV=production \
     TZ=Asia/Shanghai \
-    APP_HOME=/app
+    APP_PORT=5000
 
-# 配置阿里云镜像源加速 apt 下载（兼容旧 sources.list 与新 deb822 格式）
-RUN if [ -f /etc/apt/sources.list ]; then \
-        sed -i -e 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
-               -e 's|http://security.debian.org|http://mirrors.aliyun.com|g' \
-               /etc/apt/sources.list; \
-    fi && \
-    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-        sed -i -e 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
-               -e 's|http://security.debian.org|http://mirrors.aliyun.com|g' \
-               /etc/apt/sources.list.d/debian.sources; \
-    fi
+WORKDIR /app
 
-# 安装必要的系统工具
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    tzdata && \
-    rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# 创建非root用户
-RUN groupadd -r appuser && \
-    useradd -r -g appuser -u 1000 -m -s /bin/bash appuser
+# 服务端产物 + 静态资源（html/css/编译后的 js）
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/public ./public
 
-# 设置工作目录
-WORKDIR ${APP_HOME}
+# 运行时目录（config 由 compose 挂载；logs/output 需要可写）
+RUN mkdir -p config logs output
 
-# 从构建阶段复制Python依赖（设置正确的权限）
-COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
-
-# 复制应用代码
-COPY --chown=appuser:appuser main.py .
-COPY --chown=appuser:appuser src/ ./src/
-
-# 创建必要的目录并设置权限
-# 注意：config.ini 和 rules.yaml 由用户通过 docker-compose.yml 卷挂载提供
-# rules.yaml 支持通过 [files] rules_url / RULES_URL 从远程（GitHub）拉取，
-# 拉取或校验失败时自动回退本地规则，无需把规则写回只读的 config/ 目录。
-RUN mkdir -p logs output config && \
-    chown -R appuser:appuser ${APP_HOME}
-
-# 切换到非root用户
-USER appuser
-
-# 设置Python路径（包含用户安装的包）
-ENV PATH="/home/appuser/.local/bin:${PATH}" \
-    PYTHONPATH="/home/appuser/.local/lib/python3.12/site-packages:${PYTHONPATH}"
-
-# 暴露端口（Flask 默认端口）
 EXPOSE 5000
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f "http://localhost:${APP_PORT:-5000}/status" || exit 1
+# 健康检查用 Node 内置 fetch
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:'+(process.env.APP_PORT||5000)+'/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# 启动应用
-# 使用 gunicorn 作为生产级 WSGI 服务器
-# 单 worker + 多线程：自动更新调度与 last_update 状态需进程内一致
-# 端口由 APP_PORT 环境变量控制（默认 5000）
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${APP_PORT:-5000} --workers 1 --threads 8 --timeout 120 --access-logfile logs/access.log --error-logfile logs/error.log src.app:app"]
-
+CMD ["node", "dist/index.js"]

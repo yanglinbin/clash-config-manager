@@ -2,13 +2,13 @@
 # Clash Config Manager 主配置示例
 # 复制为 config.ini 后按需修改。
 # 当前为单一供应商模式：所有代理组只围绕一个供应商生成。
-# 生成时直接拉取 active_provider 的原始订阅并内嵌节点，
-# 不使用 proxy-providers，不依赖客户端运行时拉取订阅。
+# 生成时把 active_provider 的订阅链接写入 proxy-providers，
+# 节点由 Clash 客户端自行拉取，服务器无需访问订阅源。
 # ============================================================
 
 [proxy_providers]
 # 订阅源配置：可维护任意多个，但只有 [provider_control] active_provider
-# 指定的那一个参与生成（生成器直接拉取该订阅并转换为内嵌节点）
+# 指定的那一个参与生成
 # 格式: 配置名称 = 订阅URL
 # 名称统一转为大写，供其他配置节引用
 XXAI = https://your-subscription-url-1
@@ -17,7 +17,6 @@ NAIYUN = https://your-subscription-url-2
 [provider_control]
 # 单一供应商模式：必填，指定唯一参与生成的订阅源
 # 未配置或指定的名称不存在时，生成失败并保留旧配置
-# 环境变量 ACTIVE_PROVIDER 可覆盖此值
 active_provider = XXAI
 
 [regions]
@@ -32,20 +31,19 @@ active_provider = XXAI
 
 [filter]
 # 节点过滤：节点名包含任一关键词则不会出现在生成的任何组中（全局排除）
+# 这些关键词会转成策略组 filter 的负向前瞻，
+# 因此主组和地区组里的“剩余流量/官网/到期”等信息节点都会被排除。
+# 留空 = 不排除任何节点。
 exclude_keywords = 网址,剩余,流量,重置,套餐,如遇,永久,官方,群组,欢迎,官网,频道,个人,到期,续费
 
 [server]
 # 自动更新间隔（秒）：默认每小时（3600 秒）重新生成一次配置
-# 设为 0 或负值可关闭自动更新；环境变量 UPDATE_INTERVAL 可覆盖此值
+# 设为 0 或负值可关闭自动更新
 update_interval = 3600
 
 [files]
-# 规则配置文件路径
+# 规则配置文件路径（规则只来自本地文件）
 rules_config = config/rules.yaml
-
-# 可选：远程规则地址。配置后每次生成前会先拉取最新 rules.yaml；
-# 拉取失败自动回退本地 rules_config，环境变量 RULES_URL 可覆盖此值。
-# rules_url = https://cdn.jsdelivr.net/gh/yanglinbin/Clash-Config-Manager@main/config/rules.yaml
 
 [clash]
 # 生成 Clash 配置的基础参数
@@ -56,10 +54,6 @@ mode = Rule
 log_level = info
 external_controller = :9090
 test_url = http://connectivitycheck.gstatic.com/generate_204
-
-# 节点来源：false=把订阅链接写入 proxy-providers，由客户端拉取（默认，推荐）
-#           true=服务器拉取订阅并把节点内嵌到生成的配置
-embed_nodes = false
 
 # 地区组默认类型（可选；会被 [merged_regions] 的 default_type 覆盖）
 # 可选: select / url-test / fallback / load-balance
@@ -90,7 +84,7 @@ default_type = fallback
 # 格式: 组名 = 类型, 提供者列表, 地区列表, 目标代理组列表
 #   组名           - 节点组的名称
 #   类型           - select/fallback/url-test/load-balance
-#   提供者列表     - 已不参与筛选（直接内嵌模式只用活动供应商的节点），留空即可
+#   提供者列表     - 已不参与筛选，留空即可
 #   地区列表       - 用 | 分隔，如 香港|日本；匹配这些地区关键词的节点
 #   目标代理组列表 - 用 | 分隔；留空 = 添加到所有主代理组（特殊组除外）
 #
@@ -135,10 +129,7 @@ YouTube = 香港
 Netflix = 香港
 Google = 香港
 
-# ============ 环境变量（docker-compose.yml 或启动环境） ============
-# ACTIVE_PROVIDER - 覆盖 [provider_control] active_provider
-# UPDATE_INTERVAL - 覆盖 [server] update_interval
-# APP_PORT        - Web 服务监听端口（默认 5000）
-# LOG_LEVEL       - 日志级别: DEBUG/INFO/WARNING/ERROR（默认 INFO）
-# UPDATE_TOKEN    - /update-config 接口的 Bearer 令牌（可选）
-# RULES_URL       - 覆盖 [files] rules_url（远程 rules.yaml 地址，可选）
+# ============ 环境变量（compose.yaml 或启动环境） ============
+# APP_PORT              - Web 服务监听端口（默认 5000）
+# LOG_LEVEL             - 日志级别: DEBUG/INFO/WARNING/ERROR（默认 INFO）
+# GITHUB_WEBHOOK_SECRET - /webhook/github 的签名校验密钥（留空则禁用 webhook）

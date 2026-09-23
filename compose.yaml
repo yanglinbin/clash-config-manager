@@ -1,67 +1,47 @@
-services:
-  # Clash 配置管理器应用
-  clash-config-manager:
-    # 使用本地构建
-    # 如需使用已构建的镜像，注释掉 build 部分，启用下面的 image 配置
-    #image: clash-config-manager:latest
-    container_name: clash-config-manager
-    restart: unless-stopped
+# Clash 配置管理器 + Nginx 反向代理
+#
+# 使用：docker compose up -d --build（Docker Compose v2 会自动识别 compose.yaml）
+# 说明：
+#   - 应用镜像在本地构建（build: ., 使用根目录 Dockerfile），不再从 Docker Hub 拉取
+#   - 只对外暴露 Nginx（默认 80 端口）
+#   - Nginx 站点配置独立在 nginx/default.conf，通过绑定挂载（bind mount）注入，
+#     修改后执行 docker compose restart nginx 即可生效
+#
+# 可通过 .env 或环境变量覆盖：IMAGE / TZ / LOG_LEVEL / HTTP_PORT / GITHUB_WEBHOOK_SECRET
+# 参考 .env.example 生成 .env
+# 生成行为（更新间隔/启用订阅源/规则地址）统一由 config/config.ini 控制
 
-    # 本地构建配置
+services:
+  app:
+    # 本地构建：以项目根目录为上下文，使用根目录 Dockerfile
     build:
       context: .
       dockerfile: Dockerfile
-    # 映射到宿主机 127.0.0.1:5000，供宿主机 Nginx 反代（不暴露公网）
-    ports:
-      - "127.0.0.1:5000:5000"
-
-    # 卷挂载
+    # 构建产物的镜像名/标签（仍可用环境变量 IMAGE 覆盖）
+    image: ${IMAGE:-clash-config-manager:latest}
+    container_name: clash-config-manager
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      # 固定 5000，与 nginx/default.conf 的 proxy_pass 保持一致
+      APP_PORT: "5000"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # GitHub Webhook 签名校验密钥（非 config.ini 项；留空则禁用 webhook）
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
     volumes:
-      # 配置目录（只读挂载；远程 rules.yaml 拉取在内存中完成，不写回 config/）
+      # 配置（只读；rules.yaml 使用仓库里的本地文件，更新后重新生成即生效）
       - ./config:/app/config:ro
-      # 输出目录（生成的配置文件）
       - ./output:/app/output
-      # 日志目录
       - ./logs:/app/logs
 
-    # 环境变量
-    environment:
-      # 时区设置
-      - TZ=${TZ:-Asia/Shanghai}
-      # 应用端口（Flask 默认端口）
-      - APP_PORT=${APP_PORT:-5000}
-      # 日志级别
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      # 更新间隔（秒）
-      - UPDATE_INTERVAL=${UPDATE_INTERVAL:-3600}
-      # 单一供应商模式：指定要使用的提供者（留空则使用 config.ini 的 active_provider）
-      - ACTIVE_PROVIDER=${ACTIVE_PROVIDER:-}
-      # 更新令牌：/update-config 接口的 Bearer 令牌（可选）
-      - UPDATE_TOKEN=${UPDATE_TOKEN:-}
-      # 远程 rules.yaml 地址（可选；覆盖 config.ini 的 [files] rules_url）
-      - RULES_URL=${RULES_URL:-}
-
-    # 健康检查
-    healthcheck:
-      test: ["CMD-SHELL", 'curl -f "http://localhost:${APP_PORT:-5000}/status"']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-    # 资源限制（可选）
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.5'
-    #       memory: 256M
-    #     reservations:
-    #       cpus: '0.25'
-    #       memory: 128M
-
-    # 日志配置
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+  nginx:
+    image: nginx:alpine
+    container_name: clash-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      # 绑定挂载站点配置（只读，修改后 docker compose restart nginx 生效）
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro

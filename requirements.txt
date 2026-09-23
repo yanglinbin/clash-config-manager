@@ -1,4 +1,0 @@
-# Clash 配置服务器依赖包
-PyYAML~=6.0
-flask~=2.3.0
-gunicorn~=21.2.0

@@ -221,38 +221,6 @@ h1 {
     margin-top: 4px;
 }
 
-/* 令牌输入 */
-.token-row {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 14px;
-}
-
-.token-row label {
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.token-row input {
-    flex: 1 1 260px;
-    max-width: 360px;
-    padding: 9px 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: #ffffff;
-    color: var(--text);
-    font-size: 14px;
-}
-
-.token-row input:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
-}
-
 /* 提示 */
 .refresh-hint {
     margin: 12px 0 0;

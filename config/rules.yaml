@@ -97,7 +97,7 @@ rule-providers:
   Microsoft:
     type: http
     behavior: domain
-    url: "https://raw.githubusercontent.com/yanglinbin/clash-config-manager/refs/heads/main/clash/Microsoft.txt"
+    url: "https://raw.githubusercontent.com/yanglinbin/clash-config-manager/refs/heads/main/clash_rules/Microsoft.txt"
     path: ./ruleset/Microsoft.yaml
     interval: 86400
 
@@ -132,14 +132,17 @@ proxy_groups:
 custom_rules:
   #海外代理
   - DOMAIN-SUFFIX,geeks3d.com,海外代理
+  - DOMAIN-SUFFIX,githubusercontent.com,海外代理
 
   #全球直连
   - DOMAIN-SUFFIX,cn.download.nvidia.com,全球直连
   - DOMAIN-SUFFIX,downloadmirror.intel.com,全球直连
-
-  # Microsoft Bing 规则
+  - DOMAIN-SUFFIX,apple.com,全球直连
+  - DOMAIN-SUFFIX,cdn-apple.com,全球直连
   - DOMAIN-SUFFIX,bing.com,全球直连
   - DOMAIN-SUFFIX,bing.net,全球直连
+  - DOMAIN-KEYWORD,1drv,全球直连
+  - DOMAIN-KEYWORD,microsoft,全球直连
 
   #全球直连_steam下载
   - DOMAIN-SUFFIX,steamcontent.com,全球直连
@@ -187,8 +190,6 @@ custom_rules:
   - IP-CIDR,208.64.203.0/23,全球直连
   - IP-CIDR,208.78.164.0/22,全球直连
 
-  - DOMAIN-KEYWORD,1drv,全球直连
-  - DOMAIN-KEYWORD,microsoft,全球直连
   # F1TV规则
   - DOMAIN-SUFFIX,formula1.com,F1TV
   - DOMAIN-SUFFIX,livetiming-proxy.multiviewer.dev,F1TV

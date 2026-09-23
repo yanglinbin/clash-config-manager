@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clash Config Manager</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="page-header">
+            <h1>Clash Config Manager</h1>
+            <span class="badge live"><span class="dot" aria-hidden="true"></span>运行中</span>
+        </header>
+
+        <div class="status">
+            <h3>服务状态</h3>
+            <p class="service-line">服务正在运行</p>
+            <p>当前时间: <span id="current-time">—</span></p>
+            <p>最后更新: <span id="last-update">从未更新</span></p>
+        </div>
+
+        <div class="status">
+            <h3>配置信息</h3>
+            <p>配置文件: <span id="config-file">—</span></p>
+            <p>文件大小: <span id="config-size">—</span></p>
+            <p>提供者: <span id="stat-providers">—</span> 个</p>
+            <p>代理组: <span id="stat-groups">—</span> 个</p>
+            <p>规则: <span id="stat-rules">—</span> 条</p>
+            <p>最近生成: <span id="stat-generated">—</span></p>
+        </div>
+
+        <div class="status">
+            <h3>自动更新</h3>
+            <p>更新间隔: <span id="update-interval">—</span></p>
+            <p>下次更新: <span id="next-update">—</span></p>
+        </div>
+
+        <div class="status">
+            <h3>操作</h3>
+            <div class="btn-row">
+                <button type="button" class="btn btn-primary" id="update-btn">更新配置</button>
+                <button type="button" class="btn btn-secondary" id="refresh-btn">刷新状态</button>
+                <a class="btn btn-secondary" href="/clash_profile.yaml">下载配置</a>
+            </div>
+            <p class="refresh-hint" id="refresh-hint" hidden></p>
+        </div>
+
+        <div id="result" role="status" aria-live="polite"></div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -37,15 +37,20 @@ docker compose up -d --build
 # 3. 验证
 curl -s http://localhost/status
 
-# 4.（可选）启用 HTTPS：签发证书并切换（需域名解析已指向本机）
-bash scripts/setup-ssl.sh clash.example.com me@example.com
+# 4. 启用 HTTPS：把证书放到 nginx/certs/ 后重建 nginx
+cp 你的证书.pem nginx/certs/fullchain.pem
+cp 你的私钥.key nginx/certs/privkey.pem
+docker compose up -d --force-recreate nginx
 ```
 
 访问：
 
-- 管理界面 `http://<服务器IP>/`
-- 服务状态 `http://<服务器IP>/status`
-- Clash 配置 `http://<服务器IP>/clash_profile.yaml`
+- 管理界面 `https://<你的域名>/`
+- 服务状态 `https://<你的域名>/status`
+- Clash 配置 `https://<你的域名>/clash_profile.yaml`
+
+> 域名填在 `nginx/default.conf` 的 `server_name`（默认 `clash.yilabao.top`）。
+> 证书放置与文件名详见 [nginx/certs/README.md](nginx/certs/README.md)。
 
 **前置要求**：Docker 20.10+ 与 Docker Compose v2。
 首次构建需要能访问 npm registry 与 Docker Hub（拉取 `node:20-alpine`、`nginx:alpine`）。
@@ -91,13 +96,8 @@ clash-config-manager/
 ├── logs/                   # 日志文件（自动创建）
 ├── dist/                   # 服务端构建产物（自动生成，已忽略）
 ├── nginx/
-│   ├── default.conf        #   Nginx 站点配置（HTTP，绑定挂载进容器）
-│   ├── default.https.conf  #   HTTPS 模板（由 scripts/setup-ssl.sh 生成 default.conf）
-│   ├── letsencrypt/        #   Let's Encrypt 证书（运行时生成，已忽略）
-│   └── webroot/            #   ACME 校验目录（运行时生成，已忽略）
-├── scripts/
-│   ├── setup-ssl.sh        #   一键签发证书并切换到 HTTPS
-│   └── renew-ssl.sh        #   证书续期并 reload nginx
+│   ├── default.conf        #   Nginx 站点配置（HTTPS，绑定挂载进容器）
+│   └── certs/              #   TLS 证书（自行上传，已忽略；含 README）
 ├── .github/workflows/ci.yml  # CI（类型检查 / 测试 / 构建 / 镜像）
 ├── .env.example            # 环境变量示例
 ├── Dockerfile              # Docker 镜像定义（多阶段）

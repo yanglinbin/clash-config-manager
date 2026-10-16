@@ -28,8 +28,13 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
 
-# 运行时目录（config 由 compose 挂载；logs/output 需要可写）
-RUN mkdir -p config logs output
+# git：方案 B 定时轮询用；运行时目录（config 由 compose 挂载；logs/output/repo 需要可写）
+RUN apk add --no-cache git && \
+    mkdir -p config logs output repo && \
+    chown -R node:node logs output repo
+
+# 以非 root 运行（端口 5000 > 1024，无需特权）
+USER node
 
 EXPOSE 5000
 

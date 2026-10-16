@@ -12,7 +12,6 @@ interface StatusPayload {
   last_update?: string | null;
   config_file_exists?: boolean;
   config_file_size?: number | null;
-  webhook_enabled?: boolean;
   stats?: StatusStats;
 }
 
@@ -76,13 +75,9 @@ function numOrDash(value?: number): string {
 function applyStatus(data: StatusPayload): void {
   setText("current-time", formatTime(data.timestamp));
   setText("last-update", formatTime(data.last_update));
-  setText("webhook-status", data.webhook_enabled ? "已启用" : "未启用");
 
   setText("config-file", data.config_file_exists ? "存在" : "不存在");
-  setText(
-    "config-size",
-    data.config_file_size != null ? formatSize(data.config_file_size) : "—",
-  );
+  setText("config-size", data.config_file_size != null ? formatSize(data.config_file_size) : "—");
 
   const stats = data.stats ?? {};
   setText("stat-providers", numOrDash(stats.providers));
@@ -104,7 +99,10 @@ async function refreshStatus(silent: boolean): Promise<void> {
     }
   } catch (error) {
     if (!silent) {
-      showResult("error", `<h3>状态刷新失败</h3><p>${escapeHtml((error as Error).message ?? error)}</p>`);
+      showResult(
+        "error",
+        `<h3>状态刷新失败</h3><p>${escapeHtml((error as Error).message ?? error)}</p>`,
+      );
     }
   } finally {
     refreshing = false;
@@ -126,7 +124,10 @@ async function updateConfig(): Promise<void> {
     }
 
     if (response.ok && data.status === "success") {
-      showResult("success", `<h3>更新成功</h3><p>时间: ${escapeHtml(formatTime(data.timestamp))}</p>`);
+      showResult(
+        "success",
+        `<h3>更新成功</h3><p>时间: ${escapeHtml(formatTime(data.timestamp))}</p>`,
+      );
       await refreshStatus(true);
     } else {
       showResult(

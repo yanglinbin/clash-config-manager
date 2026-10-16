@@ -5,8 +5,9 @@
 
 import { buildApp } from "./server/app.js";
 import { ConfigManager } from "./services/configManager.js";
-import { createLogger } from "./utils/log.js";
-import { PUBLIC_DIR } from "./utils/paths.js";
+import { GitPoller, loadGitConfig } from "./services/gitPoller.js";
+import { createLogger, closeAllLoggers } from "./utils/log.js";
+import { CONFIG_INI, PUBLIC_DIR } from "./utils/paths.js";
 
 const log = createLogger("app.log");
 
@@ -15,7 +16,11 @@ const configManager = new ConfigManager(undefined, log);
 // 首次启动且输出配置不存在时，后台生成一次
 configManager.ensureInitialConfig();
 
-const app = buildApp(configManager);
+// 方案 B：定时轮询 git 仓库（默认关闭，由 config.ini [git] enable 控制）
+const gitPoller = new GitPoller(loadGitConfig(CONFIG_INI), configManager, log);
+gitPoller.start();
+
+const app = buildApp(configManager, gitPoller);
 
 const port = Number.parseInt(process.env.APP_PORT ?? "5000", 10);
 const host = "0.0.0.0";
@@ -24,15 +29,17 @@ const portSource = process.env.APP_PORT ? "环境变量" : "默认值";
 log.info(`启动 Web 服务器: ${host}:${port} (端口来源: ${portSource})`);
 log.info(`静态资源目录: ${PUBLIC_DIR}`);
 
-app
-  .listen({ host, port })
-  .catch((err) => {
-    log.error(`服务启动失败: ${(err as Error).message}`);
-    process.exit(1);
-  });
+app.listen({ host, port }).catch((err) => {
+  log.error(`服务启动失败: ${(err as Error).message}`);
+  process.exit(1);
+});
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
-    void app.close().finally(() => process.exit(0));
+    gitPoller.stop();
+    void app.close().finally(() => {
+      closeAllLoggers();
+      process.exit(0);
+    });
   });
 }

@@ -1,15 +1,39 @@
 import fs from "node:fs";
 import path from "node:path";
+import Ajv, { type ValidateFunction } from "ajv";
 import { parse as parseYaml } from "yaml";
 
+import { ConfigError } from "../utils/errors.js";
 import { getStr, hasSection, parseIni, type IniData } from "../utils/ini.js";
 import { pyList } from "../utils/format.js";
-import { PROJECT_ROOT } from "../utils/paths.js";
+import { PROJECT_ROOT, RULES_SCHEMA_FILE } from "../utils/paths.js";
 import type { Logger } from "../utils/log.js";
-import type { RegionDef, RulesConfig } from "./types.js";
+import { loadGroupConfig } from "./groups.js";
+import type { GroupConfig, RegionDef, RulesConfig } from "./types.js";
 
-/** 配置/规则加载失败（CLI 捕获后以退出码 1 结束）。 */
-export class ConfigError extends Error {}
+export { ConfigError };
+
+let rulesValidator: ValidateFunction | null | undefined;
+
+/** 懒加载并缓存 rules.schema.json 的校验器（缺失或非法时返回 null 并跳过）。 */
+function getRulesValidator(log?: Logger): ValidateFunction | null {
+  if (rulesValidator !== undefined) return rulesValidator;
+  if (!fs.existsSync(RULES_SCHEMA_FILE)) {
+    log?.warn(`规则 schema 不存在，跳过 schema 校验: ${RULES_SCHEMA_FILE}`);
+    rulesValidator = null;
+    return rulesValidator;
+  }
+  try {
+    const schema = JSON.parse(fs.readFileSync(RULES_SCHEMA_FILE, "utf-8"));
+    rulesValidator = new Ajv({ allErrors: true, strict: false, validateFormats: false }).compile(
+      schema,
+    );
+  } catch (err) {
+    log?.warn(`加载规则 schema 失败，跳过 schema 校验: ${(err as Error).message}`);
+    rulesValidator = null;
+  }
+  return rulesValidator;
+}
 
 export function loadIni(filePath: string): IniData {
   if (!fs.existsSync(filePath)) {
@@ -18,7 +42,7 @@ export function loadIni(filePath: string): IniData {
   return parseIni(fs.readFileSync(filePath, "utf-8"));
 }
 
-export function loadRulesConfig(filePath: string): RulesConfig {
+export function loadRulesConfig(filePath: string, log?: Logger): RulesConfig {
   if (!fs.existsSync(filePath)) {
     throw new ConfigError(`规则配置文件 ${filePath} 不存在`);
   }
@@ -31,6 +55,15 @@ export function loadRulesConfig(filePath: string): RulesConfig {
   if (data === null || typeof data !== "object" || Array.isArray(data)) {
     throw new ConfigError("rules.yaml 顶层必须是映射");
   }
+
+  const validate = getRulesValidator(log);
+  if (validate && !validate(data)) {
+    const details = (validate.errors ?? [])
+      .map((error) => `${error.instancePath || "/"} ${error.message ?? "无效"}`)
+      .join("; ");
+    throw new ConfigError(`规则文件未通过 schema 校验: ${details}`);
+  }
+
   return data as RulesConfig;
 }
 
@@ -44,22 +77,28 @@ export class ProjectConfig {
   private excludeKeywordsCache?: string[];
   private testUrlCache?: string;
 
+  /** 分组配置（config/groups.yaml）。 */
+  readonly groups: GroupConfig;
+  readonly groupsFile: string;
+
   private constructor(
     readonly ini: IniData,
     readonly rules: RulesConfig,
     readonly rulesFile: string,
     private readonly log: Logger,
-  ) {}
+  ) {
+    const rawGroups = getStr(ini, "files", "groups_config", "config/groups.yaml");
+    this.groupsFile = path.isAbsolute(rawGroups) ? rawGroups : path.join(PROJECT_ROOT, rawGroups);
+    this.groups = loadGroupConfig(this.groupsFile, new Set(Object.keys(this.getRegions())), log);
+  }
 
-  static load(configIniPath: string, log: Logger): ProjectConfig {
+  static load(configIniPath: string, log: Logger, rulesPathOverride?: string): ProjectConfig {
     const ini = loadIni(configIniPath);
     log.info(`已加载配置文件: ${configIniPath}`);
 
-    const rawRules = getStr(ini, "files", "rules_config", "config/rules.yaml");
-    const rulesFile = path.isAbsolute(rawRules)
-      ? rawRules
-      : path.join(PROJECT_ROOT, rawRules);
-    const rules = loadRulesConfig(rulesFile);
+    const rawRules = rulesPathOverride ?? getStr(ini, "files", "rules_config", "config/rules.yaml");
+    const rulesFile = path.isAbsolute(rawRules) ? rawRules : path.join(PROJECT_ROOT, rawRules);
+    const rules = loadRulesConfig(rulesFile, log);
     log.info(`已加载规则配置文件: ${rulesFile}`);
 
     return new ProjectConfig(ini, rules, rulesFile, log);
@@ -97,10 +136,10 @@ export class ProjectConfig {
       return (this.providersCache = {});
     }
 
-    const others = Object.keys(all).filter((n) => n !== active).sort();
-    this.log.info(
-      `只使用提供者: ${active}（其他提供者不参与生成: ${pyList(others)}）`,
-    );
+    const others = Object.keys(all)
+      .filter((n) => n !== active)
+      .sort();
+    this.log.info(`只使用提供者: ${active}（其他提供者不参与生成: ${pyList(others)}）`);
     return (this.providersCache = { [active]: all[active] });
   }
 
@@ -157,24 +196,5 @@ export class ProjectConfig {
       "test_url",
       "http://connectivitycheck.gstatic.com/generate_204",
     ));
-  }
-
-  /** 地区组的代理组类型，按 [merged_regions] → [clash] → 默认 的优先级解析。 */
-  getGroupType(regionName: string, defaultType: string): string {
-    if (hasSection(this.ini, "merged_regions")) {
-      if (regionName !== "default_type") {
-        const direct = getStr(this.ini, "merged_regions", regionName).trim();
-        if (direct) return direct;
-      }
-      const sectionDefault = getStr(this.ini, "merged_regions", "default_type").trim();
-      if (sectionDefault) return sectionDefault;
-    }
-    if (hasSection(this.ini, "clash")) {
-      const override = getStr(this.ini, "clash", `group_type_${regionName}`).trim();
-      if (override) return override;
-      const clashDefault = getStr(this.ini, "clash", "default_group_type").trim();
-      if (clashDefault) return clashDefault;
-    }
-    return defaultType;
   }
 }

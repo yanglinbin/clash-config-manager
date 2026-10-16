@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -34,5 +35,41 @@ describe("generator (订阅链接模式)", () => {
     const { ok, errors } = generator.validateGeneratedConfig(config!);
     expect(ok).toBe(false);
     expect(errors.join("\n")).toContain("不存在的组");
+  });
+
+  it("校验能发现未定义的 rule-provider", async () => {
+    const generator = new ClashConfigGenerator(CONFIG_FIXTURE, createLogger("test.log"));
+    const config = await generator.generateConfig();
+    config!.rules.push("RULE-SET,not-defined,海外代理");
+    const { ok, errors } = generator.validateGeneratedConfig(config!);
+    expect(ok).toBe(false);
+    expect(errors.join("\n")).toContain("not-defined");
+  });
+
+  it("校验能发现无效 CIDR", async () => {
+    const generator = new ClashConfigGenerator(CONFIG_FIXTURE, createLogger("test.log"));
+    const config = await generator.generateConfig();
+    config!.rules.push("IP-CIDR,999.1.1.0/24,全球直连");
+    const { ok, errors } = generator.validateGeneratedConfig(config!);
+    expect(ok).toBe(false);
+    expect(errors.join("\n")).toContain("999.1.1.0/24");
+  });
+
+  it("无效的默认节点被忽略，而不是导致生成失败", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccm-"));
+    const ini = path.join(dir, "config.ini");
+    try {
+      const base = fs.readFileSync(CONFIG_FIXTURE, "utf-8");
+      fs.writeFileSync(ini, `${base}\n海外代理 = 不存在的组\n`);
+      const generator = new ClashConfigGenerator(ini, createLogger("test.log"));
+      const config = await generator.generateConfig();
+      const { ok, errors } = generator.validateGeneratedConfig(config!);
+      expect(ok).toBe(true);
+      expect(errors).toEqual([]);
+      const main = config!["proxy-groups"]!.find((group) => group.name === "海外代理");
+      expect(main?.proxies ?? []).not.toContain("不存在的组");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -15,8 +15,8 @@ async function main(): Promise<void> {
   const log = createLogger("clash_generator.log");
   try {
     const generator = new ClashConfigGenerator(undefined, log);
-    const success = await generator.run();
-    process.exit(success ? 0 : 1);
+    const { ok } = await generator.run();
+    process.exit(ok ? 0 : 1);
   } catch (err) {
     log.error((err as Error).message);
     process.exit(1);

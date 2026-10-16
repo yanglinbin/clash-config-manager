@@ -44,12 +44,7 @@ export function hasSection(ini: IniData, section: string): boolean {
 }
 
 /** 取字符串值；缺失返回 fallback。 */
-export function getStr(
-  ini: IniData,
-  section: string,
-  key: string,
-  fallback = "",
-): string {
+export function getStr(ini: IniData, section: string, key: string, fallback = ""): string {
   const sec = ini[section];
   if (!sec || !(key in sec)) return fallback;
   return sec[key];
@@ -59,12 +54,7 @@ const TRUE_VALUES = new Set(["1", "yes", "true", "on"]);
 const FALSE_VALUES = new Set(["0", "no", "false", "off"]);
 
 /** 取整数；缺失返回 fallback，值非法抛错（对齐 configparser.getint）。 */
-export function getInt(
-  ini: IniData,
-  section: string,
-  key: string,
-  fallback: number,
-): number {
+export function getInt(ini: IniData, section: string, key: string, fallback: number): number {
   const sec = ini[section];
   if (!sec || !(key in sec)) return fallback;
   const raw = sec[key];
@@ -75,12 +65,7 @@ export function getInt(
 }
 
 /** 取布尔；缺失返回 fallback，值非法抛错（对齐 configparser.getboolean）。 */
-export function getBool(
-  ini: IniData,
-  section: string,
-  key: string,
-  fallback: boolean,
-): boolean {
+export function getBool(ini: IniData, section: string, key: string, fallback: boolean): boolean {
   const sec = ini[section];
   if (!sec || !(key in sec)) return fallback;
   const raw = sec[key].trim().toLowerCase();

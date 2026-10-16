@@ -1,7 +1,8 @@
 # Clash 配置管理器
 
-自动化的 Clash / Mihomo 配置管理服务：读取 `config.ini`（订阅源、地区、过滤、代理组）与
-`rules.yaml`（分流规则），生成可用配置并通过 Web 界面 / 接口对外提供，支持手动与 GitHub Webhook 触发更新。
+自动化的 Clash / Mihomo 配置管理服务：读取 `config.ini`（订阅源、地区关键词、过滤、基础参数）、
+`groups.yaml`（代理组结构）与 `rules.yaml`（分流规则），生成可用配置并通过 Web 界面 / 接口对外提供，
+支持手动触发与可选的 git 自动轮询更新。
 
 > **技术栈**：Node.js 20 + TypeScript + Fastify，前端同为 TypeScript。
 > **部署**：Docker Compose（应用容器 + Nginx 反代），也支持裸机运行。
@@ -14,10 +15,9 @@
 - **订阅链接模式** — 生成时把订阅链接写入 `proxy-providers`，节点由客户端自行拉取，服务器无需访问订阅源
 - **智能地区分组** — 按地区关键词自动分组（香港、台湾、日本、美国、新加坡等）
 - **节点关键词过滤** — 通过策略组 `filter` 负向前瞻排除广告 / 信息节点
-- **自定义组 / 中继组** — 按用途组合地区，可选中继组
-- **生成前校验** — 组名唯一、引用完整、类型合法、规则格式正确；失败时不覆盖旧配置
-- **手动 / Webhook 触发** — 页面与接口手动触发，或 GitHub push 即时触发（不再有定时自动更新）
-- **GitHub Webhook** — push 变更 `rules.yaml` 后即时触发重新生成（HMAC-SHA256 校验）
+- **自定义组** — 按用途组合地区/节点（详见 `config/groups.yaml`）
+- **生成前校验** — `rules.yaml` / `groups.yaml` 通过 JSON Schema；组名唯一、引用完整（含 `RULE-SET` provider）、类型合法、CIDR/规则格式正确；失败时不覆盖旧配置
+- **手动触发** — 页面与接口手动触发（无定时自动更新）
 - **Web 管理界面 + HTTP 接口**
 
 ---
@@ -28,7 +28,7 @@
 
 ```bash
 # 1. 准备配置
-cp .env.example .env                                   # 可选：端口 / 时区 / Webhook 密钥
+cp .env.example .env                                   # 可选：端口 / 时区
 cp config/config.ini.example config/config.ini         # 填入订阅链接与 active_provider
 
 # 2. 构建并启动（本地构建镜像）
@@ -72,7 +72,7 @@ clash-config-manager/
 │   ├── services/configManager.ts  # 状态 / 生成触发 / 互斥锁
 │   ├── clash/                     # 生成器核心
 │   │   ├── generator.ts           #   配置生成器
-│   │   ├── config.ts              #   config.ini + rules.yaml 解析
+│   │   ├── config.ts              #   config.ini / rules.yaml / groups.yaml 解析
 │   │   ├── rules.ts               #   规则公共常量与校验
 │   │   └── types.ts               #   类型定义
 │   ├── cli/                       # 命令行入口
@@ -88,6 +88,8 @@ clash-config-manager/
 ├── config/                 # 配置
 │   ├── config.ini          #   主配置（运行必需，需自行创建）
 │   ├── config.ini.example  #   配置示例
+│   ├── groups.yaml         #   代理组结构（运行必需）
+│   ├── groups.schema.json  #   分组 JSON Schema
 │   ├── rules.yaml          #   分流规则（运行必需）
 │   └── rules.schema.json   #   JSON Schema（仅供校验）
 ├── clash_rules/            # 规则集文本（Microsoft.txt，被 rules.yaml 的 rule-provider 引用）
@@ -102,6 +104,8 @@ clash-config-manager/
 ├── Dockerfile              # Docker 镜像定义（多阶段）
 ├── compose.yaml            # Docker Compose 编排配置
 ├── package.json            # 依赖与脚本
+├── eslint.config.js        # ESLint 扁平配置
+├── .prettierrc             # Prettier 配置
 ├── tsconfig.json           # 后端 TS 配置
 ├── tsconfig.web.json       # 前端 TS 配置
 ├── tsup.config.ts          # 服务端打包配置
@@ -135,18 +139,12 @@ exclude_keywords = 剩余,官网,到期
 
 [files]
 rules_config = config/rules.yaml     # 规则文件（本地文件）
+groups_config = config/groups.yaml   # 分组结构文件
 
 [clash]
 port = 7890
 socks_port = 7891
 mode = Rule
-
-[merged_regions]
-default_type = url-test              # 地区组类型
-
-[proxy_group_defaults]               # 可选：各主组默认选中项
-海外代理 = 香港
-全球直连 = DIRECT
 ```
 
 完整字段与说明见 **[config/config.ini.example](config/config.ini.example)** 与
@@ -168,20 +166,46 @@ default_type = url-test              # 地区组类型
 （主组与地区组都会带上），由客户端过滤信息节点
 （依赖 Mihomo/Clash.Meta 支持的 filter 正则语法）。未配置或留空时不做任何排除。
 
-### 地区组与组类型
+### 分组配置（config/groups.yaml）
 
-为 `[regions]` 中每个地区生成一个地区组（如 `香港`），通过 `use` + `filter`
-按节点名关键词匹配。组类型由 `[merged_regions]` 配置，优先级：
+代理组结构（主组 / 地区组 / 自定义组）统一在 `config/groups.yaml` 定义，
+`config.ini` 只保留地区关键词词典：
 
+```yaml
+version: 1
+region_groups:
+  type: fallback            # 地区组默认类型
+  overrides: { 香港: select }
+main:
+  # 派生组：不写 proxies，成员由 regions/targets/DIRECT 派生
+  - name: 海外代理
+    type: select
+    regions: all            # all | none | [香港, 日本]（缺省 all）
+    default: 香港           # 可选
+    nodes: true             # 缺省 true：直接纳入 provider 原始节点
+    direct: true            # 缺省 true：末尾追加 DIRECT
+  # 字面量组：写了 proxies，成员就是它，不再派生
+  - name: 广告拦截
+    type: select
+    proxies: [REJECT, DIRECT]
+custom:
+  - name: AI专用
+    type: fallback
+    regions: [香港, 日本]
+    targets: [AI平台]        # 缺省 = 全部主组
 ```
-[merged_regions] 地区键 > [merged_regions] default_type
-> [clash] group_type_地区 > [clash] default_group_type
-```
+
+派生组 `proxies` 顺序固定：默认节点 → 地区组 → 自定义组 → DIRECT；
+写了 `proxies` 的为**字面量组**，直接使用（与派生字段互斥）。
+结构由 `config/groups.schema.json`（ajv）校验，引用不存在时**报错并保留旧配置**。
+旧版散落在 `config.ini` 的分组节可用 `npm run migrate:groups` 迁移。
 
 ### 配置校验
 
-- **生成前校验**：代理组名称唯一、引用完整、类型合法、filter 正则有效、规则格式正确；
-  校验失败不会覆盖旧配置
+- **规则/分组 Schema**：加载 `rules.yaml`（`config/rules.schema.json`）与 `groups.yaml`
+  （`config/groups.schema.json`）时用 ajv 校验，错误带字段路径
+- **生成前校验**：代理组名称唯一、引用完整（含 `RULE-SET` 的 provider）、类型合法、
+  filter 正则有效、CIDR 合法、规则格式正确；校验失败不会覆盖旧配置
 - **规则 lint**：`npm run lint:rules`（重复规则、重叠 CIDR、无效引用等）
 
 ---
@@ -195,42 +219,46 @@ default_type = url-test              # 地区组类型
 | `/` | GET | Web 管理界面 |
 | `/status` | GET | 服务状态（JSON） |
 | `/update-config` | POST | 触发配置更新 |
-| `/webhook/github` | POST | GitHub Webhook（HMAC-SHA256 校验） |
-| `/clash_profile.yaml` | GET | 获取生成的 Clash 配置 |
+| `/clash_profile.yaml` | GET | 获取生成的 Clash 配置（支持 `ETag` / `304`） |
 | `/static/*` | GET | 静态资源（css / js） |
 
 ---
 
 ## 触发更新
 
-配置只在以下时机重新生成（**无定时自动更新**）：
+配置在以下时机重新生成：
 
-1. 页面「更新配置」按钮，或 `POST /update-config`
-2. GitHub Webhook（push 变更 `config/rules.yaml` 时）
-3. 服务启动时若输出配置尚不存在，自动生成一次
+1. 页面「更新配置」按钮，或 `POST /update-config`（手动）
+2. 服务启动时若输出配置尚不存在，自动生成一次
+3. **可选**：应用内定时轮询 git 仓库，检测到 `config/rules.yaml` 变化后自动重新生成（见下）
 
-规则来自本地 `config/rules.yaml`（`[files] rules_config`）。
+### 自动轮询（可选，应对入站不可达）
 
-### 推送后即时更新（GitHub Webhook）
+在 `config/config.ini` 打开 `[git]`：
 
-仓库 push 变更 `config/rules.yaml` 后，可由 GitHub Webhook 触发服务立即重新生成：
+```ini
+[git]
+enable = true
+repo = https://github.com/<你>/clash-config-manager.git
+branch = main
+interval = 300
+watched_paths = config/rules.yaml
+```
 
-1. `.env` 中设置密钥（`openssl rand -hex 32`）：
+服务器会**主动出站** `git clone/fetch` 到独立工作区（默认 `<项目根>/repo`，容器内 `/app/repo`），
+只有 `watchedPaths` 中的文件变化才触发重新生成；拉取失败时回退到挂载的 `config/rules.yaml`，
+不影响服务。公开仓库匿名 https 即可，**无需任何 token**。状态见 `GET /status` 的 `git` 字段。
 
-   ```dotenv
-   GITHUB_WEBHOOK_SECRET=你的随机密钥
-   ```
+### 手动更新规则
 
-2. GitHub 仓库 → Settings → Webhooks → Add webhook：
-   **Payload URL** `https://<你的域名>/webhook/github`、
-   **Content type** `application/json`、**Secret** 同上、
-   **Which events** 仅 `Just the push event`。
+规则默认来自本地 `config/rules.yaml`（`[files] rules_config`）。未启用自动轮询时，
+先更新宿主机的规则文件，再触发重新生成：
 
-行为：仅当 push 涉及 `config/rules.yaml` 时触发；接口立即返回 `202`，生成在后台进行；
-密钥未配置返回 `503`，签名不匹配返回 `401`。
-
-> **注意**：规则只来自宿主机挂载的 `config/rules.yaml`。Webhook 只负责触发「重新生成」，
-> 因此需保证宿主机上的规则文件已更新（例如宿主机定时 `git pull`），否则读到的仍是旧规则。
+```bash
+cd /path/to/clash-config-manager
+git pull            # 更新 config/rules.yaml
+docker compose exec clash-config-manager node dist/cli/generate.js
+```
 
 ---
 
@@ -263,8 +291,11 @@ npm run build        # 编译服务端（tsup）与前端（tsc）
 npm start            # 运行构建产物 dist/index.js（默认 0.0.0.0:5000）
 npm run generate     # 手动生成配置
 npm run lint:rules   # 规则文件 lint
+npm run migrate:groups # 把旧分组配置迁移到 config/groups.yaml
 npm test             # vitest（含与黄金文件的语义对照）
 npm run typecheck    # 类型检查
+npm run lint         # ESLint
+npm run format       # Prettier 格式化（format:check 用于 CI）
 ```
 
 ---
@@ -278,7 +309,7 @@ npm run typecheck    # 类型检查
 
 生产环境建议：
 
-- 使用 HTTPS 对外暴露；Webhook 依赖 `GITHUB_WEBHOOK_SECRET` 签名保护，勿置空
+- 使用 HTTPS 对外暴露
 - `POST /update-config` 为公开触发接口（无鉴权），公网暴露时建议在 Nginx 层限制来源或加访问控制
 - `config` 以只读方式挂载，仅 `output` / `logs` 可写
 

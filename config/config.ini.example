@@ -1,7 +1,9 @@
 # ============================================================
 # Clash Config Manager 主配置示例
 # 复制为 config.ini 后按需修改。
-# 当前为单一供应商模式：所有代理组只围绕一个供应商生成。
+#
+# 本文件只保留「订阅源 / 地区关键词 / 排除词 / 基础参数 / git」；
+# 代理组结构（主组 / 地区组 / 自定义组 / 特殊组）在 config/groups.yaml 中定义。
 # 生成时把 active_provider 的订阅链接写入 proxy-providers，
 # 节点由 Clash 客户端自行拉取，服务器无需访问订阅源。
 # ============================================================
@@ -20,7 +22,7 @@ NAIYUN = https://your-subscription-url-2
 active_provider = XXAI
 
 [regions]
-# 地区关键词配置：每个地区生成一个地区组，组名即地区名称
+# 地区关键词词典：每个地区在 groups.yaml 中对应一个地区组
 # 格式: 地区名称 = 匹配关键词1,匹配关键词2
 # 节点名包含任一关键词即归入该地区组
 香港 = Hong Kong,HK,香港,HongKong
@@ -39,6 +41,19 @@ exclude_keywords = 网址,剩余,流量,重置,套餐,如遇,永久,官方,群�
 [files]
 # 规则配置文件路径（规则只来自本地文件）
 rules_config = config/rules.yaml
+# 分组结构文件路径
+groups_config = config/groups.yaml
+
+[git]
+# 方案 B：应用内定时轮询 git 仓库，检测配置/规则变化后自动重新生成。
+# 服务器主动出站拉取（公开仓库匿名 https），不依赖任何入站连接。
+# 拉取失败时自动回退到挂载的 config/rules.yaml，不影响服务。
+enable = false
+repo = https://github.com/yanglinbin/clash-config-manager.git
+branch = main
+interval = 300                                    # 轮询间隔（秒，最小 10）
+# workspace = repo                                # 相对项目根；默认 <项目根>/repo（容器内 /app/repo）
+watched_paths = config/rules.yaml,config/groups.yaml
 
 [clash]
 # 生成 Clash 配置的基础参数
@@ -50,81 +65,6 @@ log_level = info
 external_controller = :9090
 test_url = http://connectivitycheck.gstatic.com/generate_204
 
-# 地区组默认类型（可选；会被 [merged_regions] 的 default_type 覆盖）
-# 可选: select / url-test / fallback / load-balance
-# default_group_type = fallback
-
-# 单个地区的组类型覆盖（可选），格式: group_type_地区名称 = 类型
-# group_type_香港 = select
-
-[merged_regions]
-# 地区组类型配置（作用于每个地区组）
-# 格式: 地区名称 = 代理组类型
-# 类型说明:
-#   select       - 手动选择（完全用户控制，最稳定）
-#   url-test     - 自动选择低延迟节点（可能频繁切换）
-#   fallback     - 故障转移（推荐：只在节点失败时切换，连接稳定）
-#   load-balance - 负载均衡（适合下载，但会破坏会话）
-# 优先级: 地区键 > default_type > [clash] group_type_地区 > [clash] default_group_type
-default_type = fallback
-
-香港 = fallback
-台湾 = fallback
-日本 = fallback
-美国 = fallback
-新加坡 = fallback
-
-[custom_groups]
-# 自定义节点组：为特定用途从活动提供者的节点中筛选组合
-# 格式: 组名 = 类型, 提供者列表, 地区列表, 目标代理组列表
-#   组名           - 节点组的名称
-#   类型           - select/fallback/url-test/load-balance
-#   提供者列表     - 已不参与筛选，留空即可
-#   地区列表       - 用 | 分隔，如 香港|日本；匹配这些地区关键词的节点
-#   目标代理组列表 - 用 | 分隔；留空 = 添加到所有主代理组（特殊组除外）
-#
-# 示例: AI 专用节点（稳定性优先，只添加到 AI 相关主组）
-AI专用 = fallback, XXAI, 香港|日本|美国, AI平台|Copilot
-
-# 示例: 下载专用节点（全部提供者，添加到海外代理和视频组）
-# 下载专用 = load-balance, , 香港|美国, 海外代理|YouTube|海外视频
-
-[main_proxy_region_groups]
-# 主代理组的地图组控制（可选）
-# 格式: 主组名称 = 地区1,地区2
-# 值 manual = 该主组不自动添加任何地区组，完全手动管理
-# 不配置 = 该主组自动包含全部地区组
-# AI平台 = manual
-# 全球直连 = manual
-
-[relay_groups]
-# 中继代理组（可选）：把各地区组作为节点再包一层
-# name    - 中继组名称（会出现在各主组选项中）
-# type    - fallback / url-test / load-balance
-# regions - 包含的地区列表（逗号分隔；留空 = 全部地区）
-# name = 统一代理
-# type = fallback
-# regions = 香港,台湾,日本
-
-[relay_groups_targets]
-# 中继组投放控制（可选）：只把中继组加入列出的主组
-# 格式: 主组名称 = 任意非空值
-# 不配置本节点 = 中继组加入所有主组
-# 海外代理 = 1
-
-[proxy_group_defaults]
-# 为各主代理组指定默认节点（列表第一位即 Clash 的默认选择）
-# 格式: 主组名称 = 默认节点名称
-# 可用值: 地区组名 / 自定义组名 / DIRECT / 中继组名
-# 不配置 = 使用列表第一个可用节点
-海外代理 = 香港
-Telegram = 香港
-AI平台 = AI专用
-YouTube = 香港
-Netflix = 香港
-Google = 香港
-
 # ============ 环境变量（compose.yaml 或启动环境） ============
 # APP_PORT              - Web 服务监听端口（默认 5000）
 # LOG_LEVEL             - 日志级别: DEBUG/INFO/WARNING/ERROR（默认 INFO）
-# GITHUB_WEBHOOK_SECRET - /webhook/github 的签名校验密钥（留空则禁用 webhook）

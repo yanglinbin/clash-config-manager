@@ -1,0 +1,29 @@
+# Clash 代理组结构配置
+#
+# 说明：
+#   - 每个 [regions] 地区自动生成一个地区组，这里只配置其类型与覆盖。
+#   - 派生组：不写 proxies，成员 = 默认节点 → 地区组 → 自定义组 → DIRECT。
+#   - 字面量组：写了 proxies，成员就是它，不再派生（如广告拦截）。
+#   - 自定义组通过 targets 投放到主组（留空/省略 = 全部主组）。
+#   - 详细字段见 config/groups.schema.json 与文档。
+version: 1
+
+region_groups:
+  type: url-test
+
+main:
+  - name: 海外代理
+    type: select
+    default: 香港
+  - name: F1TV
+    type: select
+    default: 美国
+  - name: 全球直连
+    type: select
+    default: DIRECT
+  - name: 漏网之鱼
+    type: select
+    default: DIRECT
+  - name: 广告拦截
+    type: select
+    proxies: [REJECT, DIRECT]

@@ -15,5 +15,11 @@ export const OUTPUT_DIR = path.join(PROJECT_ROOT, "output");
 export const OUTPUT_FILE = path.join(OUTPUT_DIR, "clash_profile.yaml");
 export const STATS_FILE = path.join(OUTPUT_DIR, "stats.json");
 export const LAST_UPDATE_FILE = path.join(OUTPUT_DIR, "last_update.txt");
+/** 分组配置文件 */
+export const GROUPS_FILE = path.join(CONFIG_DIR, "groups.yaml");
+/** rules.yaml 的 JSON Schema（见 config/rules.schema.json） */
+export const RULES_SCHEMA_FILE = path.join(CONFIG_DIR, "rules.schema.json");
+/** groups.yaml 的 JSON Schema（见 config/groups.schema.json） */
+export const GROUPS_SCHEMA_FILE = path.join(CONFIG_DIR, "groups.schema.json");
 /** 静态资源目录（index.html / css / 编译后的 js），由 Fastify 对外托管 */
 export const PUBLIC_DIR = path.join(PROJECT_ROOT, "public");

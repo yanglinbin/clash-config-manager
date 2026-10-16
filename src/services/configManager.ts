@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 import { ClashConfigGenerator } from "../clash/generator.js";
+import { writeFileAtomic } from "../utils/atomic.js";
 import { createLogger, type Logger } from "../utils/log.js";
 import {
   CONFIG_INI,
@@ -36,22 +37,33 @@ export interface Stats {
 }
 
 /**
- * 配置管理器：负责状态读取、生成触发（手动 / Webhook）。
+ * 配置管理器：负责状态读取、生成触发。
  *
- * 更新触发方式：页面「更新配置」、`POST /update-config`、GitHub Webhook，
+ * 更新触发方式：页面「更新配置」、`POST /update-config`，
  * 以及启动时若输出配置尚不存在则生成一次。不再有定时自动更新。
  */
 export class ConfigManager {
   private readonly log: Logger;
+  private readonly generatorLog: Logger;
   private readonly mutex = new Mutex();
 
   lastUpdate: Date | null;
+
+  /** 最近一次生成失败的原因（成功后清空）。 */
+  lastErrors: string[] = [];
+
+  /** 规则文件覆盖路径（方案 B：git 工作区中的 rules.yaml）；为空则用 config.ini 配置的路径。 */
+  rulesOverride: string | null = null;
+
+  /** 当前 git 工作区 HEAD（写入 stats.json，供排查）。 */
+  gitHead: string | null = null;
 
   constructor(
     readonly configFile: string = CONFIG_INI,
     log: Logger = createLogger("app.log"),
   ) {
     this.log = log;
+    this.generatorLog = createLogger("clash_generator.log");
     this.loadConfig();
     this.lastUpdate = this.readLastUpdate();
   }
@@ -97,25 +109,33 @@ export class ConfigManager {
   }
 
   /** 重新生成配置（带互斥锁，防止并发覆盖）。 */
-  regenerateConfig(): Promise<boolean> {
+  regenerateConfig(): Promise<{ ok: boolean; errors: string[] }> {
     return this.mutex.run(async () => {
       try {
         const generator = new ClashConfigGenerator(
           this.configFile,
-          createLogger("clash_generator.log"),
+          this.generatorLog,
+          this.rulesOverride ?? undefined,
+          this.gitHead,
         );
-        const ok = await generator.run();
+        const { ok, errors } = await generator.run();
         if (ok) {
           this.lastUpdate = new Date();
           this.writeLastUpdate(this.lastUpdate);
+          this.lastErrors = [];
           this.log.info("配置文件重新生成成功");
-          return true;
+          return { ok: true, errors: [] };
         }
-        this.log.error("配置文件生成失败");
-        return false;
+        this.lastErrors = errors;
+        this.writeStatsError(errors.join("; "));
+        this.log.error(`配置文件生成失败${errors.length > 0 ? `: ${errors.join("; ")}` : ""}`);
+        return { ok: false, errors };
       } catch (err) {
-        this.log.error(`生成配置异常: ${(err as Error).message}`);
-        return false;
+        const message = (err as Error).message;
+        this.lastErrors = [message];
+        this.writeStatsError(message);
+        this.log.error(`生成配置异常: ${message}`);
+        return { ok: false, errors: [message] };
       }
     });
   }
@@ -125,6 +145,18 @@ export class ConfigManager {
     if (fs.existsSync(OUTPUT_FILE)) return;
     this.log.info("输出配置不存在，启动时生成一次");
     void this.regenerateConfig();
+  }
+
+  /** 生成失败时把错误原因合并进 stats.json（文件存在才更新）。 */
+  private writeStatsError(message: string): void {
+    try {
+      if (!fs.existsSync(STATS_FILE)) return;
+      const stats = JSON.parse(fs.readFileSync(STATS_FILE, "utf-8")) as Record<string, unknown>;
+      stats.last_error = message;
+      writeFileAtomic(STATS_FILE, JSON.stringify(stats, null, 2));
+    } catch {
+      /* ignore */
+    }
   }
 
   /** 读取生成器输出的统计信息。 */

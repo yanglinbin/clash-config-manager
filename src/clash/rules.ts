@@ -4,13 +4,7 @@
  */
 
 /** Clash 内置代理关键字（引用检查时无需匹配代理组/节点） */
-export const BUILTIN_PROXIES = new Set([
-  "DIRECT",
-  "REJECT",
-  "REJECT-DROP",
-  "PASS",
-  "GLOBAL",
-]);
+export const BUILTIN_PROXIES = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "GLOBAL"]);
 
 /** 允许的规则类型 */
 export const VALID_RULE_TYPES = new Set([
@@ -43,7 +37,9 @@ export interface ParsedRule {
 
 /** 把规则行拆成 { type, fields }，每个字段去掉首尾空白。 */
 export function parseRule(rule: string): ParsedRule {
-  const fields = String(rule).split(",").map((part) => part.trim());
+  const fields = String(rule)
+    .split(",")
+    .map((part) => part.trim());
   return { type: fields[0], fields };
 }
 

@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Clash Groups Configuration Schema",
+  "description": "代理组结构定义（config/groups.yaml）",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["main"],
+  "properties": {
+    "version": { "type": "integer" },
+    "region_groups": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/definitions/groupType" },
+        "overrides": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/groupType" }
+        }
+      }
+    },
+    "custom": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "regions"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "$ref": "#/definitions/groupType" },
+          "regions": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "targets": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "main": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/derivedGroup" },
+          { "$ref": "#/definitions/literalGroup" }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "groupType": {
+      "enum": ["select", "url-test", "fallback", "load-balance", "relay"]
+    },
+    "derivedGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/definitions/groupType" },
+        "regions": {
+          "oneOf": [
+            { "enum": ["all", "none"] },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "nodes": { "type": "boolean" },
+        "direct": { "type": "boolean" },
+        "default": { "type": "string" }
+      }
+    },
+    "literalGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "proxies"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/definitions/groupType" },
+        "proxies": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

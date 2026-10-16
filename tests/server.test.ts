@@ -1,85 +1,21 @@
-import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../src/server/app.js";
 import type { ConfigManager } from "../src/services/configManager.js";
 
-const SECRET = "testsecret";
-
 function stubManager(): ConfigManager {
   return {
     lastUpdate: null,
+    lastErrors: [],
     readStats: () => null,
-    regenerateConfig: vi.fn(async () => true),
+    regenerateConfig: vi.fn(async () => ({ ok: true, errors: [] })),
   } as unknown as ConfigManager;
 }
 
-function sign(body: string): string {
-  return "sha256=" + crypto.createHmac("sha256", SECRET).update(Buffer.from(body)).digest("hex");
-}
-
-describe("webhook / 路由", () => {
-  it("未配置密钥返回 503；ping 与签名校验", async () => {
-    delete process.env.GITHUB_WEBHOOK_SECRET;
-    let app = buildApp(stubManager());
-    let res = await app.inject({ method: "POST", url: "/webhook/github", payload: {} });
-    expect(res.statusCode).toBe(503);
-    await app.close();
-
-    process.env.GITHUB_WEBHOOK_SECRET = SECRET;
-    app = buildApp(stubManager());
-
-    res = await app.inject({
-      method: "POST",
-      url: "/webhook/github",
-      headers: { "content-type": "application/json", "x-github-event": "ping", "x-hub-signature-256": "sha256=bad" },
-      payload: "{}",
-    });
-    expect(res.statusCode).toBe(401);
-
-    const body = JSON.stringify({ zen: "hi" });
-    res = await app.inject({
-      method: "POST",
-      url: "/webhook/github",
-      headers: { "content-type": "application/json", "x-github-event": "ping", "x-hub-signature-256": sign(body) },
-      payload: body,
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: "pong" });
-
-    await app.close();
-  });
-
-  it("push 未涉及 rules.yaml 时忽略，涉及则触发", async () => {
-    process.env.GITHUB_WEBHOOK_SECRET = SECRET;
-    const manager = stubManager();
-    const app = buildApp(manager);
-
-    const other = JSON.stringify({ commits: [{ modified: ["README.md"] }] });
-    let res = await app.inject({
-      method: "POST",
-      url: "/webhook/github",
-      headers: { "content-type": "application/json", "x-github-event": "push", "x-hub-signature-256": sign(other) },
-      payload: other,
-    });
-    expect(res.statusCode).toBe(202);
-    expect(res.json().status).toBe("ignored");
-
-    const rules = JSON.stringify({ commits: [{ modified: ["config/rules.yaml"] }] });
-    res = await app.inject({
-      method: "POST",
-      url: "/webhook/github",
-      headers: { "content-type": "application/json", "x-github-event": "push", "x-hub-signature-256": sign(rules) },
-      payload: rules,
-    });
-    expect(res.statusCode).toBe(202);
-    expect(res.json().status).toBe("accepted");
-
-    await app.close();
-    delete process.env.GITHUB_WEBHOOK_SECRET;
-  });
-
+describe("路由", () => {
   it("/status 返回关键字段", async () => {
     const app = buildApp(stubManager());
     const res = await app.inject({ method: "GET", url: "/status" });
@@ -87,7 +23,70 @@ describe("webhook / 路由", () => {
     const data = res.json();
     expect(data.server).toBe("Clash Config Manager");
     expect(data).toHaveProperty("config_file_exists");
-    expect(data).toHaveProperty("webhook_enabled");
     await app.close();
+  });
+
+  it("/update-config 触发重新生成", async () => {
+    const manager = stubManager();
+    const app = buildApp(manager);
+    const res = await app.inject({ method: "POST", url: "/update-config" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("success");
+    expect(manager.regenerateConfig).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it("/update-config 失败时回传错误原因", async () => {
+    const manager = {
+      lastUpdate: null,
+      lastErrors: [],
+      readStats: () => null,
+      regenerateConfig: vi.fn(async () => ({ ok: false, errors: ["boom"] })),
+    } as unknown as ConfigManager;
+    const app = buildApp(manager);
+    const res = await app.inject({ method: "POST", url: "/update-config" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("error");
+    expect(res.json().errors).toEqual(["boom"]);
+    await app.close();
+  });
+
+  it("/status 暴露 last_error", async () => {
+    const manager = {
+      lastUpdate: null,
+      lastErrors: ["bad config"],
+      readStats: () => null,
+      regenerateConfig: vi.fn(),
+    } as unknown as ConfigManager;
+    const app = buildApp(manager);
+    const res = await app.inject({ method: "GET", url: "/status" });
+    expect(res.json().last_error).toBe("bad config");
+    await app.close();
+  });
+
+  it("/clash_profile.yaml 支持 ETag / 304", async () => {
+    const file = path.join(process.cwd(), "output", "clash_profile.yaml");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const backup = fs.existsSync(file) ? fs.readFileSync(file) : null;
+    try {
+      fs.writeFileSync(file, "port: 7890\n");
+      const app = buildApp(stubManager());
+
+      const first = await app.inject({ method: "GET", url: "/clash_profile.yaml" });
+      expect(first.statusCode).toBe(200);
+      const etag = first.headers.etag as string;
+      expect(etag).toBeTruthy();
+
+      const second = await app.inject({
+        method: "GET",
+        url: "/clash_profile.yaml",
+        headers: { "if-none-match": etag },
+      });
+      expect(second.statusCode).toBe(304);
+      await app.close();
+    } finally {
+      if (backup) fs.writeFileSync(file, backup);
+      else fs.rmSync(file, { force: true });
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/index.ts", "src/cli/generate.ts", "src/cli/lint.ts"],
+  entry: ["src/index.ts", "src/cli/generate.ts", "src/cli/lint.ts", "src/cli/migrateGroups.ts"],
   format: ["esm"],
   target: "node20",
   outDir: "dist",

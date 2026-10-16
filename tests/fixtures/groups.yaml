@@ -1,0 +1,25 @@
+# 测试用分组配置
+#
+# 与重构前 tests/fixtures/config.ini + config/rules.yaml 的分组等价，
+# 用于在 CI 等环境复现黄金文件 tests/fixtures/clash_profile.python.yaml。
+version: 1
+
+region_groups:
+  type: url-test
+
+main:
+  - name: 海外代理
+    type: select
+    default: 香港
+  - name: F1TV
+    type: select
+    default: 美国
+  - name: 全球直连
+    type: select
+    default: DIRECT
+  - name: 漏网之鱼
+    type: select
+    default: DIRECT
+  - name: 广告拦截
+    type: select
+    proxies: [REJECT, DIRECT]

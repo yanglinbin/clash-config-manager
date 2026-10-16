@@ -44,6 +44,8 @@ config/*.example
 config/config.ini
 config/rules.yaml
 config/rules.schema.json
+config/groups.yaml
+config/groups.schema.json
 
 # 测试相关
 tests/

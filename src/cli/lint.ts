@@ -22,10 +22,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parse as parseYaml } from "yaml";
 
+import { loadIni } from "../clash/config.js";
 import { checkRule, parseRule } from "../clash/rules.js";
 import { isSubnetOf, overlaps, parseCidr, type Cidr } from "../utils/cidr.js";
 import { pyList } from "../utils/format.js";
-import { PROJECT_ROOT } from "../utils/paths.js";
+import { hasSection } from "../utils/ini.js";
+import { CONFIG_INI, GROUPS_FILE, PROJECT_ROOT } from "../utils/paths.js";
 
 interface Parsed {
   rule: string;
@@ -33,18 +35,35 @@ interface Parsed {
   fields: string[];
 }
 
-function collectGroupNames(data: Record<string, unknown>): Set<string> {
+/** 从 config.ini 的地区与 config/groups.yaml 收集全部合法代理组名。 */
+function collectGroupNames(): Set<string> {
   const names = new Set<string>();
-  const proxyGroups = (data["proxy_groups"] ?? {}) as Record<string, unknown>;
-  for (const key of ["main_groups", "special_groups"]) {
-    const groups = proxyGroups[key];
-    if (!Array.isArray(groups)) continue;
-    for (const group of groups) {
-      if (group && typeof group === "object" && typeof (group as any).name === "string") {
-        names.add((group as any).name);
+
+  try {
+    const ini = loadIni(CONFIG_INI);
+    if (hasSection(ini, "regions")) {
+      for (const region of Object.keys(ini["regions"])) names.add(region);
+    }
+  } catch {
+    /* config.ini 缺失时仅依赖 groups.yaml */
+  }
+
+  try {
+    const doc = parseYaml(fs.readFileSync(GROUPS_FILE, "utf-8")) as Record<string, unknown>;
+    for (const key of ["main", "custom", "special"]) {
+      const groups = doc?.[key];
+      if (!Array.isArray(groups)) continue;
+      for (const group of groups) {
+        if (group && typeof group === "object") {
+          const name = (group as { name?: unknown }).name;
+          if (typeof name === "string") names.add(name);
+        }
       }
     }
+  } catch {
+    /* groups.yaml 缺失时忽略 */
   }
+
   return names;
 }
 
@@ -52,7 +71,10 @@ function sameNet(a: Cidr, b: Cidr): boolean {
   return a.version === b.version && a.start === b.start && a.prefix === b.prefix;
 }
 
-export function lint(filePath: string): { errors: string[]; warnings: string[] } {
+export function lint(
+  filePath: string,
+  groupNames: Set<string> = collectGroupNames(),
+): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -61,7 +83,6 @@ export function lint(filePath: string): { errors: string[]; warnings: string[] }
     throw new Error("rules.yaml 顶层必须是映射");
   }
   const doc = data as Record<string, unknown>;
-  const groupNames = collectGroupNames(doc);
 
   const allRules: string[] = [];
   if (Array.isArray(doc["custom_rules"])) allRules.push(...(doc["custom_rules"] as string[]));
@@ -172,9 +193,7 @@ function main(): number {
 
   for (const w of result.warnings) console.log(`WARN  ${w}`);
   for (const e of result.errors) console.log(`ERROR ${e}`);
-  console.log(
-    `\n检查完成: ${result.errors.length} 个错误, ${result.warnings.length} 个警告`,
-  );
+  console.log(`\n检查完成: ${result.errors.length} 个错误, ${result.warnings.length} 个警告`);
   return result.errors.length > 0 ? 1 : 0;
 }
 

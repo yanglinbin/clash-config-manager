@@ -101,33 +101,6 @@ rule-providers:
     path: ./ruleset/Microsoft.yaml
     interval: 86400
 
-# 代理组配置
-proxy_groups:
-  # 主要代理组配置
-  main_groups:
-    - name: "海外代理"
-      type: select
-      description: "通用海外代理，适用于大部分海外网站"
-
-    - name: "F1TV"
-      type: select
-      description: "其他海外视频平台"
-
-    - name: "全球直连"
-      type: select
-      description: "直连访问"
-
-    - name: "漏网之鱼"
-      type: select
-      description: "兜底规则"
-
-  # 特殊代理组（不使用代理提供商）
-  special_groups:
-    - name: "广告拦截"
-      type: select
-      proxies: ["REJECT", "DIRECT"]
-      description: "广告拦截设置"
-
 # 自定义规则
 custom_rules:
   #海外代理

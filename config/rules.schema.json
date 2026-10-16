@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Clash Rules Configuration Schema",
-  "description": "Schema for rules.yaml configuration file with proper YAML indentation (2 spaces)",
+  "description": "Schema for rules.yaml (rule-providers + custom_rules + ruleset_rules)",
   "type": "object",
   "$comment": "YAML formatting rules: Use 2-space indentation, no tabs, consistent spacing for lists and objects",
   "properties": {
@@ -37,72 +37,12 @@
         }
       }
     },
-    "proxy_groups": {
-      "type": "object",
-      "description": "Proxy groups configuration (main_groups + special_groups)",
-      "properties": {
-        "main_groups": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "type": {
-                "type": "string",
-                "enum": ["select", "url-test", "fallback", "load-balance", "relay"]
-              },
-              "proxies": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "description": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "type"],
-            "additionalProperties": false
-          }
-        },
-        "special_groups": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "type": {
-                "type": "string",
-                "enum": ["select", "url-test", "fallback", "load-balance", "relay"]
-              },
-              "proxies": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "description": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "type", "proxies"],
-            "additionalProperties": false
-          }
-        }
-      }
-    },
     "custom_rules": {
       "type": "array",
       "description": "Custom rules as flat array with 2-space indentation (  - RULE-TYPE,param,proxy-group)",
       "items": {
         "type": "string",
-        "pattern": "^(DOMAIN|DOMAIN-SUFFIX|DOMAIN-KEYWORD|IP-CIDR|IP-CIDR6|GEOIP|SRC-IP-CIDR|SRC-PORT|DST-PORT|PROCESS-NAME|PROCESS-PATH|RULE-SET|MATCH|AND|OR|NOT|SUB-RULE),",
+        "pattern": "^(DOMAIN|DOMAIN-SUFFIX|DOMAIN-KEYWORD|DOMAIN-REGEX|IP-CIDR|IP-CIDR6|GEOIP|GEOSITE|SRC-IP-CIDR|SRC-IP-ASN|SRC-PORT|DST-PORT|PROCESS-NAME|PROCESS-PATH|RULE-SET|MATCH|AND|OR|NOT|SUB-RULE),",
         "examples": [
           "DOMAIN-SUFFIX,example.com,海外代理",
           "IP-CIDR,192.168.1.0/24,全球直连",
@@ -112,13 +52,13 @@
     },
     "ruleset_rules": {
       "type": "array",
-      "description": "Rule-set reference rules",
+      "description": "Rule-set reference rules (mixed rules; same accepted types as custom_rules)",
       "items": {
         "type": "string",
-        "pattern": "^(RULE-SET|GEOIP|MATCH),"
+        "pattern": "^(DOMAIN|DOMAIN-SUFFIX|DOMAIN-KEYWORD|DOMAIN-REGEX|IP-CIDR|IP-CIDR6|GEOIP|GEOSITE|SRC-IP-CIDR|SRC-IP-ASN|SRC-PORT|DST-PORT|PROCESS-NAME|PROCESS-PATH|RULE-SET|MATCH|AND|OR|NOT|SUB-RULE),"
       }
     }
   },
-  "required": ["rule-providers", "proxy_groups", "custom_rules", "ruleset_rules"],
+  "required": ["rule-providers", "custom_rules", "ruleset_rules"],
   "additionalProperties": false
 }

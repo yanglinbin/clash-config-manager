@@ -1,15 +1,14 @@
-# Clash 配置管理器 + Nginx 反向代理
+# Clash 配置管理器（应用容器）
 #
 # 使用：docker compose up -d --build（Docker Compose v2 会自动识别 compose.yaml）
 # 说明：
-#   - 应用镜像在本地构建（build: ., 使用根目录 Dockerfile），不再从 Docker Hub 拉取
-#   - 只对外暴露 Nginx（默认 80 端口）
-#   - Nginx 站点配置独立在 nginx/default.conf，通过绑定挂载（bind mount）注入，
-#     修改后执行 docker compose restart nginx 即可生效
+#   - 应用镜像在本地构建（build: ., 使用根目录 Dockerfile）
+#   - 不再内置 Nginx：应用端口默认仅绑定 127.0.0.1，供宿主机 Nginx / 网关反向代理
+#     如需直接对外，把 ports 改成 "0.0.0.0:${HTTP_PORT:-5000}:5000"
 #
-# 可通过 .env 或环境变量覆盖：IMAGE / TZ / LOG_LEVEL / HTTP_PORT / HTTPS_PORT
+# 可通过 .env 或环境变量覆盖：IMAGE / TZ / LOG_LEVEL / HTTP_PORT
 # 参考 .env.example 生成 .env
-# 生成行为（更新间隔/启用订阅源/规则地址）统一由 config/config.ini 控制
+# 生成行为（启用订阅源、规则/分组、git 轮询）统一由 config/config.ini 与 config/groups.yaml 控制
 
 services:
   app:
@@ -23,7 +22,7 @@ services:
     restart: unless-stopped
     environment:
       TZ: ${TZ:-Asia/Shanghai}
-      # 固定 5000，与 nginx/default.conf 的 proxy_pass 保持一致
+      # 容器内监听端口（固定 5000，与下方 ports 的容器侧一致）
       APP_PORT: "5000"
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # 可选：覆盖 config.ini 的 [git] 段（方案 B）；留空则只用 config.ini
@@ -32,29 +31,16 @@ services:
       GIT_BRANCH: ${GIT_BRANCH:-}
       GIT_INTERVAL: ${GIT_INTERVAL:-}
       GIT_WORKSPACE: ${GIT_WORKSPACE:-}
+    ports:
+      # 默认仅绑定本机，供宿主机 Nginx 反代；如需直接对外改为 "0.0.0.0:${HTTP_PORT:-5000}:5000"
+      - "127.0.0.1:${HTTP_PORT:-5000}:5000"
     volumes:
-      # 配置（只读；rules.yaml 使用仓库里的本地文件，更新后重新生成即生效）
+      # 配置（只读；rules.yaml / groups.yaml 使用仓库里的本地文件，更新后重新生成即生效）
       - ./config:/app/config:ro
       - ./output:/app/output
       - ./logs:/app/logs
       # 方案 B：git 轮询的独立克隆目录（命名卷，不污染宿主机）
       - repo-data:/app/repo
-
-  nginx:
-    # 固定版本，避免拉到旧缓存镜像（旧版不支持 http2 指令）
-    image: nginx:1.30-alpine
-    container_name: clash-nginx
-    restart: unless-stopped
-    depends_on:
-      - app
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-    volumes:
-      # 站点配置（只读）
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      # TLS 证书（自行上传到 ./nginx/certs/，只读）
-      - ./nginx/certs:/etc/nginx/certs:ro
 
 volumes:
   # 方案 B：git 轮询克隆的工作区（容器内 /app/repo）

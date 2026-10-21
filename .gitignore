@@ -94,8 +94,3 @@ dist/
 coverage/
 public/js/
 *.tsbuildinfo
-
-# ===== TLS 证书（自行上传，勿提交私钥） =====
-nginx/certs/*
-!nginx/certs/README.md
-!nginx/certs/.gitkeep

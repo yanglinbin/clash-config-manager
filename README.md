@@ -103,7 +103,6 @@ clash-config-manager/
 ├── output/                 # 生成结果（自动创建）
 ├── logs/                   # 日志文件（自动创建）
 ├── dist/                   # 服务端构建产物（自动生成，已忽略）
-├── nginx/                  # 宿主机 Nginx 参考配置（非 compose 管理）
 ├── .github/workflows/ci.yml  # CI（类型检查 / 测试 / 构建 / 镜像）
 ├── .env.example            # 环境变量示例
 ├── Dockerfile              # Docker 镜像定义（多阶段）

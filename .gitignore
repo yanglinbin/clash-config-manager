@@ -1,96 +1,45 @@
-# ===== 敏感信息 =====
-# 环境变量文件（包含敏感信息）
-.env
-.env.local
-.env.*.local
+# ===== 依赖 =====
+node_modules/
 
-# 配置文件（包含代理订阅链接等敏感信息）
-config/config.ini
+# ===== 构建产物 =====
+dist/
+public/js/
+coverage/
+*.tsbuildinfo
 
-# ===== 生成的文件 =====
-# 生成的配置文件
+# ===== 运行时生成 =====
 output/
-*.yaml.bak
-
-# 备份文件
-backups/
-
-# ===== 日志文件 =====
 logs/
 *.log
 
-# ===== Python 相关 =====
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# ===== git 轮询工作区（方案 B，裸机运行时生成） =====
+repo/
 
-# 虚拟环境
-venv/
-env/
-ENV/
-.venv
+# ===== 敏感配置（含订阅链接 / 密钥） =====
+.env
+.env.local
+.env.*.local
+config/config.ini
 
-# ===== IDE 相关 =====
+# ===== 临时 / 备份 =====
+*.tmp
+*.temp
+*.cache
+*.bak
+*.orig
+*.rej
+backups/
+
+# ===== IDE / 编辑器 =====
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.project
-.pydevproject
-.settings/
 
 # ===== 系统文件 =====
 .DS_Store
-.DS_Store?
 ._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
+ehthumbs.db
 desktop.ini
-
-# ===== Docker 相关 =====
-# Docker volumes
-docker-volumes/
-.docker/
-
-# ===== 临时文件 =====
-*.tmp
-*.temp
-*.cache
-
-# ===== 本地验证/工具缓存 =====
-.uv-cache/
-.uv-python/
-.verify_tmp/
-
-# ===== 文档 =====
-docs/
-
-# ===== Node / TypeScript =====
-node_modules/
-dist/
-coverage/
-public/js/
-*.tsbuildinfo

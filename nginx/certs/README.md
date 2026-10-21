@@ -16,8 +16,8 @@ cp cert.crt cert.key nginx/certs/
 # 确认文件到位（宿主机侧）
 ls -l nginx/certs/
 
-# 让 nginx 重新读取
-docker compose up -d --force-recreate nginx
+# 让宿主机 nginx 重新读取
+nginx -t && nginx -s reload
 ```
 
 > 文件名可以不同 —— 只要同步修改 `nginx/default.conf` 里的

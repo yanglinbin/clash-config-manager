@@ -65,6 +65,6 @@ log_level = info
 external_controller = :9090
 test_url = http://connectivitycheck.gstatic.com/generate_204
 
-# ============ 环境变量（compose.yaml 或启动环境） ============
+# ============ 环境变量（docker run -e / 启动环境） ============
 # APP_PORT              - Web 服务监听端口（默认 5000）
 # LOG_LEVEL             - 日志级别: DEBUG/INFO/WARNING/ERROR（默认 INFO）

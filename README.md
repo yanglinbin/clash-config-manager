@@ -5,7 +5,7 @@
 支持手动触发与可选的 git 自动轮询更新。
 
 > **技术栈**：Node.js 20 + TypeScript + Fastify，前端同为 TypeScript。
-> **部署**：Docker Compose（仅应用容器，端口绑定本机，由宿主机 Nginx 反代），也支持裸机运行。
+> **部署**：Docker（单容器 `docker run`）或裸机运行，端口绑定本机由宿主机 Nginx 反代。
 
 ---
 
@@ -28,15 +28,26 @@
 
 ```bash
 # 1. 准备配置
-cp .env.example .env                                   # 可选：端口 / 时区
+cp .env.example .env                                   # 可选：时区 / 日志级别
 cp config/config.ini.example config/config.ini         # 填入订阅链接与 active_provider
 
-# 2. 构建并启动（本地构建镜像）
-docker compose up -d --build
+# 2. 构建镜像并启动容器（应用仅绑定 127.0.0.1:5000）
+docker build -t clash-config-manager:latest .
 
-# 3. 验证（应用默认仅绑定 127.0.0.1:5000）
-curl -s http://localhost:5000/status
+docker run -d --name clash-config-manager --restart unless-stopped \
+  --env-file .env -e APP_PORT=5000 \
+  -p 127.0.0.1:5000:5000 \
+  -v "$PWD/config:/app/config:ro" \
+  -v "$PWD/output:/app/output" \
+  -v "$PWD/logs:/app/logs" \
+  -v clash-repo-data:/app/repo \
+  clash-config-manager:latest
+
+# 3. 验证
+curl -s http://127.0.0.1:5000/status
 ```
+
+> 不想用 Docker？见 [部署手册 · 裸机运行](./部署手册.md)，直接 `npm ci && npm run build && npm start`。
 
 访问（经宿主机 Nginx 反代到 `http://127.0.0.1:5000`）：
 
@@ -47,10 +58,10 @@ curl -s http://localhost:5000/status
 未配置反向代理时，也可在本机直接访问 `http://127.0.0.1:5000`。
 宿主机 Nginx 反向代理示例见 **[部署手册 · 对外访问与 HTTPS](./部署手册.md)**。
 
-**前置要求**：Docker 20.10+ 与 Docker Compose v2。
+**前置要求**：Docker 20.10+（或 Node.js ≥ 20 裸机运行）。
 首次构建需要能访问 npm registry 与 Docker Hub（拉取 `node:20-alpine`）。
 
-若宿主机 Nginx 以容器方式运行、需要与应用互联，可选地创建共享网络：
+若宿主机 Nginx 以容器方式运行、需要与应用互联，可创建共享网络并在 `docker run` 加 `--network docker-shared-net`：
 
 ```bash
 docker network create docker-shared-net
@@ -96,7 +107,6 @@ clash-config-manager/
 ├── .github/workflows/ci.yml  # CI（类型检查 / 测试 / 构建 / 镜像）
 ├── .env.example            # 环境变量示例
 ├── Dockerfile              # Docker 镜像定义（多阶段）
-├── compose.yaml            # Docker Compose 编排配置
 ├── package.json            # 依赖与脚本
 ├── eslint.config.js        # ESLint 扁平配置
 ├── .prettierrc             # Prettier 配置
@@ -251,7 +261,7 @@ watched_paths = config/rules.yaml
 ```bash
 cd /path/to/clash-config-manager
 git pull            # 更新 config/rules.yaml
-docker compose exec clash-config-manager node dist/cli/generate.js
+docker exec clash-config-manager node dist/cli/generate.js
 ```
 
 ---
@@ -259,21 +269,23 @@ docker compose exec clash-config-manager node dist/cli/generate.js
 ## 常用命令
 
 ```bash
-# 构建 / 重新构建镜像
-docker compose build
-docker compose up -d --build
+# 构建镜像
+docker build -t clash-config-manager:latest .
 
 # 状态 / 日志 / 重启 / 停止
-docker compose ps
-docker compose logs -f
-docker compose restart
-docker compose down
+docker ps | grep clash-config-manager
+docker logs -f clash-config-manager
+docker restart clash-config-manager
+docker stop clash-config-manager
+docker rm -f clash-config-manager
+
+# 重建容器：删除旧容器后，重新执行「快速开始」中的 docker run
 
 # 手动生成配置
-docker compose exec clash-config-manager node dist/cli/generate.js
+docker exec clash-config-manager node dist/cli/generate.js
 
 # 规则 lint
-docker compose exec clash-config-manager node dist/cli/lint.js
+docker exec clash-config-manager node dist/cli/lint.js
 ```
 
 ### 本地开发（不使用 Docker）
